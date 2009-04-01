@@ -1,5 +1,6 @@
 from django.core.management.base import NoArgsCommand
 from django.core.management.color import no_style
+from django.utils.importlib import import_module
 from optparse import make_option
 import sys
 
@@ -30,7 +31,7 @@ class Command(NoArgsCommand):
         # dispatcher events.
         for app_name in settings.INSTALLED_APPS:
             try:
-                __import__(app_name + '.management', {}, {}, [''])
+                import_module('.management', app_name)
             except ImportError, exc:
                 # This is slightly hackish. We want to ignore ImportErrors
                 # if the "management" module itself is missing -- but we don't
@@ -71,7 +72,7 @@ class Command(NoArgsCommand):
                     if refto in seen_models:
                         sql.extend(connection.creation.sql_for_pending_references(refto, self.style, pending_references))
                 sql.extend(connection.creation.sql_for_pending_references(model, self.style, pending_references))
-                if verbosity >= 1:
+                if verbosity >= 1 and sql:
                     print "Creating table %s" % model._meta.db_table
                 for statement in sql:
                     cursor.execute(statement)

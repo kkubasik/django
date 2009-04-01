@@ -13,15 +13,83 @@ This file describes some of the features that might be relevant to Django
 usage. Of course, it is not intended as a replacement for server-specific
 documentation or reference manuals.
 
+.. _postgresql-notes:
+
+PostgreSQL notes
+================
+
+PostgreSQL 8.2 to 8.2.4
+-----------------------
+
+The implementation of the population statistics aggregates ``STDDEV_POP`` and
+``VAR_POP`` that shipped with PostgreSQL 8.2 to 8.2.4 are `known to be
+faulty`_. Users of these releases of PostgreSQL are advised to upgrade to
+`Release 8.2.5`_ or later. Django will raise a ``NotImplementedError`` if you
+attempt to use the ``StdDev(sample=False)`` or ``Variance(sample=False)``
+aggregate with a database backend that falls within the affected release range.
+
+.. _known to be faulty: http://archives.postgresql.org/pgsql-bugs/2007-07/msg00046.php
+.. _Release 8.2.5: http://developer.postgresql.org/pgdocs/postgres/release-8-2-5.html
+
+Transaction handling
+---------------------
+
+:ref:`By default <topics-db-transactions>`, Django starts a transaction when a
+database connection is first used and commits the result at the end of the
+request/response handling. The PostgreSQL backends normally operate the same
+as any other Django backend in this respect.
+
+Autocommit mode
+~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.1
+
+If your application is particularly read-heavy and doesn't make many database
+writes, the overhead of a constantly open transaction can sometimes be
+noticeable. For those situations, if you're using the ``postgresql_psycopg2``
+backend, you can configure Django to use *"autocommit"* behavior for the
+connection, meaning that each database operation will normally be in its own
+transaction, rather than having the transaction extend over multiple
+operations. In this case, you can still manually start a transaction if you're
+doing something that requires consistency across multiple database operations.
+The autocommit behavior is enabled by setting the ``autocommit`` key in the
+:setting:`DATABASE_OPTIONS` setting::
+
+    DATABASE_OPTIONS = {
+        "autocommit": True,
+    }
+
+In this configuration, Django still ensures that :ref:`delete()
+<topics-db-queries-delete>` and :ref:`update() <topics-db-queries-update>`
+queries run inside a single transaction, so that either all the affected
+objects are changed or none of them are.
+
+.. admonition:: This is database-level autocommit
+
+    This functionality is not the same as the
+    :ref:`topics-db-transactions-autocommit` decorator. That decorator is a
+    Django-level implementation that commits automatically after data changing
+    operations. The feature enabled using the :setting:`DATABASE_OPTIONS`
+    settings provides autocommit behavior at the database adapter level. It
+    commits after *every* operation.
+
+If you are using this feature and performing an operation akin to delete or
+updating that requires multiple operations, you are strongly recommended to
+wrap you operations in manual transaction handling to ensure data consistency.
+You should also audit your existing code for any instances of this behavior
+before enabling this feature. It's faster, but it provides less automatic
+protection for multi-call operations.
+
+
 .. _mysql-notes:
 
 MySQL notes
 ===========
 
-Django expects the database to support transactions, referential integrity,
-and Unicode support (UTF-8 encoding). Fortunately, MySQL_ has all these
-features as available as far back as 3.23. While it may be possible to use
-3.23 or 4.0, you'll probably have less trouble if you use 4.1 or 5.0.
+Django expects the database to support transactions, referential integrity, and
+Unicode (UTF-8 encoding). Fortunately, MySQL_ has all these features as
+available as far back as 3.23. While it may be possible to use 3.23 or 4.0,
+you'll probably have less trouble if you use 4.1 or 5.0.
 
 MySQL 4.1
 ---------
@@ -163,7 +231,7 @@ table (usually called ``django_session`` and the table
 Connecting to the database
 --------------------------
 
-Refer to the :ref:`settings documentation <ref-settings>`. 
+Refer to the :ref:`settings documentation <ref-settings>`.
 
 Connection settings are used in this order:
 
@@ -183,7 +251,7 @@ Here's a sample configuration which uses a MySQL option file::
   DATABASE_ENGINE = "mysql"
   DATABASE_OPTIONS = {
       'read_default_file': '/path/to/my.cnf',
-      }
+  }
 
   # my.cnf
   [client]
@@ -221,9 +289,7 @@ storage engine, you have a couple of options.
       creating your tables::
 
           DATABASE_OPTIONS = {
-              # ...
              "init_command": "SET storage_engine=INNODB",
-              # ...
           }
 
       This sets the default storage engine upon connecting to the database.
@@ -234,8 +300,11 @@ storage engine, you have a couple of options.
 
 .. _AlterModelOnSyncDB: http://code.djangoproject.com/wiki/AlterModelOnSyncDB
 
-Boolean fields in Django
--------------------------
+Notes on specific fields
+------------------------
+
+Boolean fields
+~~~~~~~~~~~~~~
 
 Since MySQL doesn't have a direct ``BOOLEAN`` column type, Django uses a
 ``TINYINT`` column with values of ``1`` and ``0`` to store values for the
@@ -244,48 +313,133 @@ of that field for more details, but usually this won't be something that will
 matter unless you're printing out the field values and are expecting to see
 ``True`` and ``False.``.
 
+Character fields
+~~~~~~~~~~~~~~~~
+
+Any fields that are stored with ``VARCHAR`` column types have their
+``max_length`` restricted to 255 characters if you are using ``unique=True``
+for the field. This affects :class:`~django.db.models.CharField`,
+:class:`~django.db.models.SlugField` and
+:class:`~django.db.models.CommaSeparatedIntegerField`.
+
+Furthermore, if you are using a version of MySQL prior to 5.0.3, all of those
+column types have a maximum length restriction of 255 characters, regardless
+of whether ``unique=True`` is specified or not.
+
 .. _sqlite-notes:
 
-SQLite notes 
-============ 
- 
-Versions of SQLite 3.3.5 and older `contain a bug`_ when handling ``ORDER BY``
-parameters. This can cause problems when you use the ``select`` parameter for
-the ``extra()`` QuerySet method. The bug can be identified by the error message
-``OperationalError: ORDER BY terms must not be non-integer constants``. The
-problem can be solved updating SQLite to version 3.3.6 or newer, possibly also
-updating the ``pysqlite2`` Python module in the process.
- 
-.. _contain a bug: http://www.sqlite.org/cvstrac/tktview?tn=1768 
- 
-This has a very low impact because 3.3.6 was released in April 2006, so most 
-current binary distributions for different platforms include newer version of 
-SQLite usable from Python through either the ``pysqlite2`` or the ``sqlite3`` 
-modules. 
- 
-However, in the case of Windows, the official binary distribution of the stable 
-release of Python 2.5 (2.5.2, as of this writing) includes SQLite 3.3.4, so the bug can 
-make itself evident in that platform. There are (as of Django 1.0) even three 
-tests in the Django test suite that will fail when run under this setup.  As 
-described above, this can be solved by downloading and installing a newer 
-version of ``pysqlite2`` (``pysqlite-2.x.x.win32-py2.5.exe``) that includes and 
-uses a newer version of SQLite. Python 2.6 ships with a newer version of 
-SQLite and is not affected by this issue.
+SQLite notes
+============
 
-If you are in such platform and find yourself in the need to update
-``pysqlite``/SQLite, you will also need to manually modify the
-``django/db/backends/sqlite3/base.py`` file in the Django source tree so it
-attempts to import ``pysqlite2`` before than ``sqlite3`` and so it can take
-advantage of the new ``pysqlite2``/SQLite versions.
+SQLite_ provides an excellent development alternative for applications that
+are predominantly read-only or require a smaller installation footprint. As
+with all database servers, though, there are some differences that are
+specific to SQLite that you should be aware of.
+
+.. _SQLite: http://www.sqlite.org/
+
+.. _sqlite-string-matching:
+
+String matching for non-ASCII strings
+--------------------------------------
+
+SQLite doesn't support case-insensitive matching for non-ASCII strings. Some
+possible workarounds for this are `documented at sqlite.org`_, but they are
+not utilised by the default SQLite backend in Django. Therefore, if you are
+using the ``iexact`` lookup type in your queryset filters, be aware that it
+will not work as expected for non-ASCII strings.
+
+.. _documented at sqlite.org: http://www.sqlite.org/faq.html#q18
+
+SQLite 3.3.6 or newer strongly recommended
+------------------------------------------
+
+Versions of SQLite 3.3.5 and older contains the following bugs:
+
+ * A bug when `handling`_ ``ORDER BY`` parameters. This can cause problems when
+   you use the ``select`` parameter for the ``extra()`` QuerySet method. The bug
+   can be identified by the error message ``OperationalError: ORDER BY terms
+   must not be non-integer constants``.
+
+ * A bug when handling `aggregation`_ together with DateFields and
+   DecimalFields.
+
+.. _handling: http://www.sqlite.org/cvstrac/tktview?tn=1768
+.. _aggregation: http://code.djangoproject.com/ticket/10031
+
+SQLite 3.3.6 was released in April 2006, so most current binary distributions
+for different platforms include newer version of SQLite usable from Python
+through either the ``pysqlite2`` or the ``sqlite3`` modules.
+
+However, some platform/Python version combinations include older versions of
+SQLite (e.g. the official binary distribution of Python 2.5 for Windows, 2.5.4
+as of this writing, includes SQLite 3.3.4). There are (as of Django 1.1) even
+some tests in the Django test suite that will fail when run under this setup.
+
+As described :ref:`below<using-newer-versions-of-pysqlite>`, this can be solved
+by downloading and installing a newer version of ``pysqlite2``
+(``pysqlite-2.x.x.win32-py2.5.exe`` in the described case) that includes and
+uses a newer version of SQLite. Python 2.6 for Windows ships with a version of
+SQLite that is not affected by these issues.
+
+Version 3.5.9
+-------------
+
+The Ubuntu "Intrepid Ibex" (8.10) SQLite 3.5.9-3 package contains a bug that
+causes problems with the evaluation of query expressions. If you are using
+Ubuntu "Intrepid Ibex", you will need to update the package to version
+3.5.9-3ubuntu1 or newer (recommended) or find an alternate source for SQLite
+packages, or install SQLite from source.
+
+At one time, Debian Lenny shipped with the same malfunctioning SQLite 3.5.9-3
+package. However the Debian project has subsequently issued updated versions
+of the SQLite package that correct these bugs. If you find you are getting
+unexpected results under Debian, ensure you have updated your SQLite package
+to 3.5.9-5 or later.
+
+The problem does not appear to exist with other versions of SQLite packaged
+with other operating systems.
+
+Version 3.6.2
+--------------
+
+SQLite version 3.6.2 (released August 30, 2008) introduced a bug into ``SELECT
+DISTINCT`` handling that is triggered by, amongst other things, Django's
+``DateQuerySet`` (returned by the ``dates()`` method on a queryset).
+
+You should avoid using this version of SQLite with Django. Either upgrade to
+3.6.3 (released September 22, 2008) or later, or downgrade to an earlier
+version of SQLite.
+
+.. _using-newer-versions-of-pysqlite:
+
+Using newer versions of the SQLite DB-API 2.0 driver
+----------------------------------------------------
+
+.. versionadded:: 1.1
+
+For versions of Python 2.5 or newer that include ``sqlite3`` in the standard
+library Django will now use a ``pysqlite2`` interface in preference to
+``sqlite3`` if it finds one is available.
+
+This provides the ability to upgrade both the DB-API 2.0 interface or SQLite 3
+itself to versions newer than the ones included with your particular Python
+binary distribution, if needed.
 
 .. _oracle-notes:
 
 Oracle notes
 ============
 
-Django supports `Oracle Database Server`_ versions 9i and higher. Oracle
-version 10g or later is required to use Django's ``regex`` and ``iregex`` query
-operators. You will also need the `cx_Oracle`_ driver, version 4.3.1 or newer.
+Django supports `Oracle Database Server`_ versions 9i and
+higher. Oracle version 10g or later is required to use Django's
+``regex`` and ``iregex`` query operators. You will also need at least
+version 4.3.1 of the `cx_Oracle`_ Python driver.
+
+Note that due to a Unicode-corruption bug in ``cx_Oracle`` 5.0, that
+version of the driver should **not** be used with Django;
+``cx_Oracle`` 5.0.1 resolved this issue, so if you'd like to use a
+more recent ``cx_Oracle``, use version 5.0.1.
 
 .. _`Oracle Database Server`: http://www.oracle.com/
 .. _`cx_Oracle`: http://cx-oracle.sourceforge.net/
@@ -297,14 +451,14 @@ database user must have privileges to run the following commands:
     * CREATE SEQUENCE
     * CREATE PROCEDURE
     * CREATE TRIGGER
-    
+
 To run Django's test suite, the user needs these *additional* privileges:
 
     * CREATE USER
     * DROP USER
     * CREATE TABLESPACE
     * DROP TABLESPACE
-    
+
 Connecting to the database
 --------------------------
 
@@ -386,12 +540,13 @@ characters of the truncated name with a repeatable MD5 hash value.
 NULL and empty strings
 ----------------------
 
-Django generally prefers to use the empty string ('') rather than NULL, but
-Oracle treats both identically. To get around this, the Oracle backend
-coerces the ``null=True`` option on fields that permit the empty string as a
-value. When fetching from the database, it is assumed that a NULL value in
-one of these fields really means the empty string, and the data is silently
-converted to reflect this assumption.
+Django generally prefers to use the empty string ('') rather than
+NULL, but Oracle treats both identically. To get around this, the
+Oracle backend coerces the ``null=True`` option on fields that have
+the empty string as a possible value. When fetching from the database,
+it is assumed that a NULL value in one of these fields really means
+the empty string, and the data is silently converted to reflect this
+assumption.
 
 ``TextField`` limitations
 -------------------------

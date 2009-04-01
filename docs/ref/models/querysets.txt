@@ -154,9 +154,51 @@ In SQL terms, that evaluates to::
 
     SELECT ...
     WHERE NOT pub_date > '2005-1-3'
-    AND NOT headline = 'Hello'
+    OR NOT headline = 'Hello'
 
 Note the second example is more restrictive.
+
+``annotate(*args, **kwargs)``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.1
+
+Annotates each object in the ``QuerySet`` with the provided list of
+aggregate values (averages, sums, etc) that have been computed over
+the objects that are related to the objects in the ``QuerySet``.
+Each argument to ``annotate()`` is an annotation that will be added
+to each object in the ``QuerySet`` that is returned.
+
+The aggregation functions that are provided by Django are described
+in `Aggregation Functions`_ below.
+
+Annotations specified using keyword arguments will use the keyword as
+the alias for the annotation. Anonymous arguments will have an alias
+generated for them based upon the name of the aggregate function and
+the model field that is being aggregated.
+
+For example, if you were manipulating a list of blogs, you may want
+to determine how many entries have been made in each blog::
+
+    >>> q = Blog.objects.annotate(Count('entry'))
+    # The name of the first blog
+    >>> q[0].name
+    'Blogasaurus'
+    # The number of entries on the first blog
+    >>> q[0].entry__count
+    42
+
+The ``Blog`` model doesn't define an ``entry_count`` attribute by itself,
+but by using a keyword argument to specify the aggregate function, you can
+control the name of the annotation::
+
+    >>> q = Blog.objects.annotate(number_of_entries=Count('entry'))
+    # The number of entries on the first blog, using the name provided
+    >>> q[0].number_of_entries
+    42
+
+For an in-depth discussion of aggregation, see :ref:`the topic guide on
+Aggregation <topics-db-aggregation>`.
 
 ``order_by(*fields)``
 ~~~~~~~~~~~~~~~~~~~~~
@@ -253,6 +295,8 @@ a model which defines a default ordering, or when using
 ``QuerySet``, calling ``reverse()`` on it has no real effect (the
 ordering was undefined prior to calling ``reverse()``, and will remain
 undefined afterward).
+
+.. _querysets-distinct:
 
 ``distinct()``
 ~~~~~~~~~~~~~~
@@ -726,6 +770,103 @@ of the arguments is required, but you should use at least one of them.
 
         Entry.objects.extra(where=['headline=%s'], params=['Lennon'])
 
+.. _queryset-defer:
+
+``defer(*fields)``
+~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.1
+
+In some complex data-modeling situations, your models might contain a lot of
+fields, some of which could contain a lot of data (for example, text fields),
+or require expensive processing to convert them to Python objects. If you are
+using the results of a queryset in some situation where you know you don't
+need those particular fields, you can tell Django not to retrieve them from
+the database.
+
+This is done by passing the names of the fields to not load to ``defer()``::
+
+    Entry.objects.defer("lede", "body")
+
+A queryset that has deferred fields will still return model instances. Each
+deferred field will be retrieved from the database if you access that field
+(one at a time, not all the deferred fields at once).
+
+You can make multiple calls to ``defer()``. Each call adds new fields to the
+deferred set::
+
+    # Defers both the body and lede fields.
+    Entry.objects.defer("body").filter(headline="Lennon").defer("lede")
+
+The order in which fields are added to the deferred set does not matter. Calling ``defer()`` with a field name that has already been deferred is harmless (the field will still be deferred).
+
+You can defer loading of fields in related models (if the related models are
+loading via ``select_related()``) by using the standard double-underscore
+notation to separate related fields::
+
+    Blog.objects.select_related().defer("entry__lede", "entry__body")
+
+If you want to clear the set of deferred fields, pass ``None`` as a parameter
+to ``defer()``::
+
+    # Load all fields immediately.
+    my_queryset.defer(None)
+
+Some fields in a model won't be deferred, even if you ask for them. You can
+never defer the loading of the primary key. If you are using
+``select_related()`` to retrieve other models at the same time you shouldn't
+defer the loading of the field that connects from the primary model to the
+related one (at the moment, that doesn't raise an error, but it will
+eventually).
+
+.. note::
+
+    The ``defer()`` method (and its cousin, ``only()``, below) are only for
+    advanced use-cases. They provide an optimization for when you have
+    analyzed your queries closely and understand *exactly* what information
+    you need and have measured that the difference between returning the
+    fields you need and the full set of fields for the model will be
+    significant. When you are initially developing your applications, don't
+    bother using ``defer()``; leave it until your query construction has
+    settled down and you understand where the hot-points are.
+
+``only(*fields)``
+~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.1
+
+The ``only()`` method is more or less the opposite of ``defer()``. You
+call it with the fields that should *not* be deferred when retrieving a model.
+If you have a model where almost all the fields need to be deferred, using
+``only()`` to specify the complementary set of fields could result in simpler
+code.
+
+If you have a model with fields ``name``, ``age`` and ``biography``, the
+following two querysets are the same, in terms of deferred fields::
+
+    Person.objects.defer("age", "biography")
+    Person.objects.only("name")
+
+Whenever you call ``only()`` it *replaces* the set of fields to load
+immediately. The method's name is mnemonic: **only** those fields are loaded
+immediately; the remainder are deferred. Thus, successive calls to ``only()``
+result in only the final fields being considered::
+
+    # This will defer all fields except the headline.
+    Entry.objects.only("body", "lede").only("headline")
+
+Since ``defer()`` acts incrementally (adding fields to the deferred list), you
+can combine calls to ``only()`` and ``defer()`` and things will behave
+logically::
+
+    # Final result is that everything except "headline" is deferred.
+    Entry.objects.only("headline", "body").defer("body")
+
+    # Final result loads headline and body immediately (only() replaces any
+    # existing set of fields).
+    Entry.objects.defer("body").only("headline", "body")
+
+
 QuerySet methods that do not return QuerySets
 ---------------------------------------------
 
@@ -931,6 +1072,38 @@ exist with the given parameters.
 
 Note ``latest()`` exists purely for convenience and readability.
 
+``aggregate(*args, **kwargs)``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 1.1
+
+Returns a dictionary of aggregate values (averages, sums, etc) calculated
+over the ``QuerySet``. Each argument to ``aggregate()`` specifies
+a value that will be included in the dictionary that is returned.
+
+The aggregation functions that are provided by Django are described
+in `Aggregation Functions`_ below.
+
+Aggregates specified using keyword arguments will use the keyword as
+the name for the annotation. Anonymous arguments will have an name
+generated for them based upon the name of the aggregate function and
+the model field that is being aggregated.
+
+For example, if you were manipulating blog entries, you may want to know
+the number of authors that have contributed blog entries::
+
+    >>> q = Blog.objects.aggregate(Count('entry'))
+    {'entry__count': 16}
+
+By using a keyword argument to specify the aggregate function, you can
+control the name of the aggregation value that is returned::
+
+    >>> q = Blog.objects.aggregate(number_of_entries=Count('entry'))
+    {'number_of_entries': 16}
+
+For an in-depth discussion of aggregation, see :ref:`the topic guide on
+Aggregation <topics-db-aggregation>`.
+
 .. _field-lookups:
 
 Field lookups
@@ -986,8 +1159,15 @@ SQL equivalent::
 
     SELECT ... WHERE name ILIKE 'beatles blog';
 
-Note this will match ``'Beatles Blog'``, ``'beatles blog'``,
-``'BeAtLes BLoG'``, etc.
+Note this will match ``'Beatles Blog'``, ``'beatles blog'``, ``'BeAtLes
+BLoG'``, etc.
+
+.. admonition:: SQLite users
+
+    When using the SQLite backend and Unicode (non-ASCII) strings, bear in
+    mind the :ref:`database note <sqlite-string-matching>` about string
+    comparisons. SQLite does not do case-insensitive matching for Unicode
+    strings.
 
 contains
 ~~~~~~~~
@@ -1021,6 +1201,12 @@ SQL equivalent::
 
     SELECT ... WHERE headline ILIKE '%Lennon%';
 
+.. admonition:: SQLite users
+
+    When using the SQLite backend and Unicode (non-ASCII) strings, bear in
+    mind the :ref:`database note <sqlite-string-matching>` about string
+    comparisons.
+
 in
 ~~
 
@@ -1035,12 +1221,43 @@ SQL equivalent::
     SELECT ... WHERE id IN (1, 3, 4);
 
 You can also use a queryset to dynamically evaluate the list of values
-instead of providing a list of literal values. The queryset must be
-reduced to a list of individual values using the ``values()`` method,
-and then converted into a query using the ``query`` attribute::
+instead of providing a list of literal values::
 
-    q = Blog.objects.filter(name__contains='Cheddar').values('pk').query
-    e = Entry.objects.filter(blog__in=q)
+    inner_qs = Blog.objects.filter(name__contains='Cheddar')
+    entries = Entry.objects.filter(blog__in=inner_qs)
+
+This queryset will be evaluated as subselect statement::
+
+    SELECT ... WHERE blog.id IN (SELECT id FROM ... WHERE NAME LIKE '%Cheddar%')
+
+The above code fragment could also be written as follows::
+
+    inner_q = Blog.objects.filter(name__contains='Cheddar').values('pk').query
+    entries = Entry.objects.filter(blog__in=inner_q)
+
+
+.. versionchanged:: 1.1
+    In Django 1.0, only the latter piece of code is valid.
+
+This second form is a bit less readable and unnatural to write, since it
+accesses the internal ``query`` attribute and requires a ``ValuesQuerySet``.
+If your code doesn't require compatibility with Django 1.0, use the first
+form, passing in a queryset directly.
+
+If you pass in a ``ValuesQuerySet`` or ``ValuesListQuerySet`` (the result of
+calling ``values()`` or ``values_list()`` on a queryset) as the value to an
+``__in`` lookup, you need to ensure you are only extracting one field in the
+result. For example, this will work (filtering on the blog names)::
+
+    inner_qs = Blog.objects.filter(name__contains='Ch').values('name')
+    entries = Entry.objects.filter(blog__name__in=inner_qs)
+
+This example will raise an exception, since the inner query is trying to
+extract two field values, where only one is expected::
+
+    # Bad code! Will raise a TypeError.
+    inner_qs = Blog.objects.filter(name__contains='Ch').values('name', 'id')
+    entries = Entry.objects.filter(blog__name__in=inner_qs)
 
 .. warning::
 
@@ -1048,9 +1265,18 @@ and then converted into a query using the ``query`` attribute::
     It's fine to use it like above, but its API may change between Django
     versions.
 
-This queryset will be evaluated as subselect statement::
+.. admonition:: Performance considerations
 
-    SELECT ... WHERE blog.id IN (SELECT id FROM ... WHERE NAME LIKE '%Cheddar%')
+    Be cautious about using nested queries and understand your database
+    server's performance characteristics (if in doubt, benchmark!). Some
+    database backends, most notably MySQL, don't optimize nested queries very
+    well. It is more efficient, in those cases, to extract a list of values
+    and then pass that into the second query. That is, execute two queries
+    instead of one::
+
+        values = Blog.objects.filter(
+                name__contains='Cheddar').values_list('pk', flat=True)
+        entries = Entry.objects.filter(blog__in=values)
 
 gt
 ~~
@@ -1109,6 +1335,12 @@ SQL equivalent::
 
     SELECT ... WHERE headline ILIKE 'Will%';
 
+.. admonition:: SQLite users
+
+    When using the SQLite backend and Unicode (non-ASCII) strings, bear in
+    mind the :ref:`database note <sqlite-string-matching>` about string
+    comparisons.
+
 endswith
 ~~~~~~~~
 
@@ -1137,6 +1369,12 @@ Example::
 SQL equivalent::
 
     SELECT ... WHERE headline ILIKE '%will'
+
+.. admonition:: SQLite users
+
+    When using the SQLite backend and Unicode (non-ASCII) strings, bear in
+    mind the :ref:`database note <sqlite-string-matching>` about string
+    comparisons.
 
 range
 ~~~~~
@@ -1205,6 +1443,27 @@ SQL equivalent::
 Note this will match any record with a pub_date on the third day of the month,
 such as January 3, July 3, etc.
 
+week_day
+~~~~~~~~
+
+.. versionadded:: 1.1
+
+For date/datetime fields, a 'day of the week' match.
+
+Example::
+
+    Entry.objects.filter(pub_date__week_day=2)
+
+SQL equivalent::
+
+    SELECT ... WHERE EXTRACT('dow' FROM pub_date) = '2';
+
+(The exact SQL syntax varies for each database engine.)
+
+Note this will match any record with a pub_date that falls on a Monday (day 2
+of the week), regardless of the month or year in which it occurs. Week days
+are indexed with day 1 being Sunday and day 7 being Saturday.
+
 isnull
 ~~~~~~
 
@@ -1225,8 +1484,18 @@ search
 A boolean full-text search, taking advantage of full-text indexing. This is
 like ``contains`` but is significantly faster due to full-text indexing.
 
+Example::
+    
+    Entry.objects.filter(headline__search="+Django -jazz Python")
+
+SQL equivalent::
+
+    SELECT ... WHERE MATCH(tablename, headline) AGAINST (+Django -jazz Python IN BOOLEAN MODE);
+
 Note this is only available in MySQL and requires direct manipulation of the
-database to add the full-text index.
+database to add the full-text index. By default Django uses BOOLEAN MODE for
+full text searches. `Please check MySQL documentation for additional details. <http://dev.mysql.com/doc/refman/5.1/en/fulltext-boolean.html>`_
+
 
 regex
 ~~~~~
@@ -1277,3 +1546,117 @@ SQL equivalents::
 
     SELECT ... WHERE title REGEXP '(?i)^(an?|the) +'; -- SQLite
 
+.. _aggregation-functions:
+
+Aggregation Functions
+---------------------
+
+.. versionadded:: 1.1
+
+Django provides the following aggregation functions in the
+``django.db.models`` module. For details on how to use these
+aggregate functions, see
+:ref:`the topic guide on aggregation <topics-db-aggregation>`.
+
+``Avg``
+~~~~~~~
+
+.. class:: Avg(field)
+
+Returns the mean value of the given field.
+
+    * Default alias: ``<field>__avg``
+    * Return type: float
+
+``Count``
+~~~~~~~~~
+
+.. class:: Count(field, distinct=False)
+
+Returns the number of objects that are related through the provided field.
+
+    * Default alias: ``<field>__count``
+    * Return type: integer
+
+Has one optional argument:
+
+.. attribute:: distinct
+
+    If distinct=True, the count will only include unique instances. This has
+    the SQL equivalent of ``COUNT(DISTINCT field)``. Default value is ``False``.
+
+``Max``
+~~~~~~~
+
+.. class:: Max(field)
+
+Returns the maximum value of the given field.
+
+    * Default alias: ``<field>__max``
+    * Return type: same as input field
+
+``Min``
+~~~~~~~
+
+.. class:: Min(field)
+
+Returns the minimum value of the given field.
+
+    * Default alias: ``<field>__min``
+    * Return type: same as input field
+
+``StdDev``
+~~~~~~~~~~
+
+.. class:: StdDev(field, sample=False)
+
+Returns the standard deviation of the data in the provided field.
+
+    * Default alias: ``<field>__stddev``
+    * Return type: float
+
+Has one optional argument:
+
+.. attribute:: sample
+
+    By default, ``StdDev`` returns the population standard deviation. However,
+    if ``sample=True``, the return value will be the sample standard deviation.
+
+.. admonition:: SQLite
+
+    SQLite doesn't provide ``StdDev`` out of the box. An implementation is
+    available as an extension module for SQLite. Consult the SQlite
+    documentation for instructions on obtaining and installing this extension.
+
+``Sum``
+~~~~~~~
+
+.. class:: Sum(field)
+
+Computes the sum of all values of the given field.
+
+    * Default alias: ``<field>__sum``
+    * Return type: same as input field
+
+``Variance``
+~~~~~~~~~~~~
+
+.. class:: Variance(field, sample=False)
+
+Returns the variance of the data in the provided field.
+
+    * Default alias: ``<field>__variance``
+    * Return type: float
+
+Has one optional argument:
+
+.. attribute:: sample
+
+    By default, ``Variance`` returns the population variance. However,
+    if ``sample=True``, the return value will be the sample variance.
+
+.. admonition:: SQLite
+
+    SQLite doesn't provide ``Variance`` out of the box. An implementation is
+    available as an extension module for SQLite. Consult the SQlite
+    documentation for instructions on obtaining and installing this extension.

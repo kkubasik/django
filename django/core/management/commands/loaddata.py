@@ -1,14 +1,22 @@
-from django.core.management.base import BaseCommand
-from django.core.management.color import no_style
-from optparse import make_option
 import sys
 import os
-import bz2, gzip, zipfile
+import gzip
+import zipfile
+from optparse import make_option
+
+from django.core.management.base import BaseCommand
+from django.core.management.color import no_style
 
 try:
     set
 except NameError:
     from sets import Set as set   # Python 2.3 fallback
+
+try:
+    import bz2
+    has_bz2 = True
+except ImportError:
+    has_bz2 = False
 
 class Command(BaseCommand):
     help = 'Installs the named fixture(s) in the database.'
@@ -62,10 +70,11 @@ class Command(BaseCommand):
 
         compression_types = {
             None:   file,
-            'bz2':  bz2.BZ2File,
             'gz':   gzip.GzipFile,
             'zip':  SingleZipReader
         }
+        if has_bz2:
+            compression_types['bz2'] = bz2.BZ2File
 
         app_fixtures = [os.path.join(os.path.dirname(app.__file__), 'fixtures') for app in get_apps()]
         for fixture_label in fixture_labels:
@@ -152,12 +161,12 @@ class Command(BaseCommand):
                                     transaction.rollback()
                                     transaction.leave_transaction_management()
                                     if show_traceback:
-                                        import traceback
                                         traceback.print_exc()
                                     else:
                                         sys.stderr.write(
                                             self.style.ERROR("Problem installing fixture '%s': %s\n" %
-                                                 (full_path, traceback.format_exc())))
+                                                 (full_path, ''.join(traceback.format_exception(sys.exc_type, 
+                                                     sys.exc_value, sys.exc_traceback))))) 
                                     return
                                 fixture.close()
 
@@ -175,10 +184,6 @@ class Command(BaseCommand):
                             if verbosity > 1:
                                 print "No %s fixture '%s' in %s." % \
                                     (format, fixture_name, humanize(fixture_dir))
-                                print e
-                                transaction.rollback()
-                                transaction.leave_transaction_management()
-                                return
 
         # If we found even one object in a fixture, we need to reset the
         # database sequences.

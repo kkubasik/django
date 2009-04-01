@@ -149,7 +149,9 @@ def floatformat(text, arg=-1):
     except InvalidOperation:
         if input_val in special_floats:
             return input_val
-        else:
+        try:
+            d = Decimal(force_unicode(float(text)))
+        except (ValueError, InvalidOperation, TypeError, UnicodeEncodeError):
             return u''
     try:
         p = int(arg)
@@ -422,10 +424,18 @@ def safe(value):
     """
     Marks the value as a string that should not be auto-escaped.
     """
-    from django.utils.safestring import mark_safe
     return mark_safe(value)
 safe.is_safe = True
 safe = stringfilter(safe)
+
+def safeseq(value):
+    """
+    A "safe" filter for sequences. Marks each element in the sequence,
+    individually, as safe, after converting them to unicode. Returns a list
+    with the results.
+    """
+    return [mark_safe(force_unicode(obj)) for obj in value]
+safeseq.is_safe = True
 
 def removetags(value, tags):
     """Removes a space separated list of [X]HTML tags from the output."""
@@ -507,12 +517,18 @@ last.is_safe = True
 
 def length(value):
     """Returns the length of the value - useful for lists."""
-    return len(value)
+    try:
+        return len(value)
+    except (ValueError, TypeError):
+        return ''
 length.is_safe = True
 
 def length_is(value, arg):
     """Returns a boolean of whether the value's length is the argument."""
-    return len(value) == int(arg)
+    try:
+        return len(value) == int(arg)
+    except (ValueError, TypeError):
+        return ''
 length_is.is_safe = False
 
 def random(value):
@@ -876,6 +892,7 @@ register.filter(removetags)
 register.filter(random)
 register.filter(rjust)
 register.filter(safe)
+register.filter(safeseq)
 register.filter('slice', slice_)
 register.filter(slugify)
 register.filter(stringformat)

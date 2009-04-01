@@ -14,11 +14,11 @@ Django uses request and response objects to pass state through the system.
 
 When a page is requested, Django creates an :class:`HttpRequest` object that
 contains metadata about the request. Then Django loads the appropriate view,
-passing the :class:`HttpRequest` as the first argument to the view function. Each
-view is responsible for returning an :class:`HttpResponse` object.
+passing the :class:`HttpRequest` as the first argument to the view function.
+Each view is responsible for returning an :class:`HttpResponse` object.
 
-This document explains the APIs for :class:`HttpRequest` and :class:`HttpResponse`
-objects.
+This document explains the APIs for :class:`HttpRequest` and
+:class:`HttpResponse` objects.
 
 HttpRequest objects
 ===================
@@ -103,7 +103,8 @@ All attributes except ``session`` should be considered read-only.
         * ``read(num_bytes=None)`` -- Read a number of bytes from the file.
         * ``name`` -- The name of the uploaded file.
         * ``size`` -- The size, in bytes, of the uploaded file.
-        * ``chunks(chunk_size=None)`` -- A generator that yields sequential chunks of data.
+        * ``chunks(chunk_size=None)`` -- A generator that yields sequential
+          chunks of data.
 
     See :ref:`topics-files` for more information.
 
@@ -138,9 +139,17 @@ All attributes except ``session`` should be considered read-only.
         * ``QUERY_STRING`` -- The query string, as a single (unparsed) string.
         * ``REMOTE_ADDR`` -- The IP address of the client.
         * ``REMOTE_HOST`` -- The hostname of the client.
+        * ``REMOTE_USER`` -- The user authenticated by the web server, if any.
         * ``REQUEST_METHOD`` -- A string such as ``"GET"`` or ``"POST"``.
         * ``SERVER_NAME`` -- The hostname of the server.
         * ``SERVER_PORT`` -- The port of the server.
+
+    With the exception of ``CONTENT_LENGTH`` and ``CONTENT_TYPE``, as given
+    above, any HTTP headers in the request are converted to ``META`` keys by
+    converting all characters to uppercase, replacing any hyphens with
+    underscores and adding an ``HTTP_`` prefix to the name. So, for example, a
+    header called ``X-Bender`` would be mapped to the ``META`` key
+    ``HTTP_X_BENDER``.
 
 .. attribute:: HttpRequest.user
 
@@ -221,9 +230,10 @@ Methods
 
    .. versionadded:: 1.0
 
-   Returns ``True`` if the request was made via an ``XMLHttpRequest``, by checking
-   the ``HTTP_X_REQUESTED_WITH`` header for the string ``'XMLHttpRequest'``. The
-   following major JavaScript libraries all send this header:
+   Returns ``True`` if the request was made via an ``XMLHttpRequest``, by
+   checking the ``HTTP_X_REQUESTED_WITH`` header for the string
+   ``'XMLHttpRequest'``. The following major JavaScript libraries all send this
+   header:
 
        * jQuery
        * Dojo
@@ -287,7 +297,7 @@ a subclass of dictionary. Exceptions are outlined here:
     Just like the standard dictionary ``setdefault()`` method, except it uses
     ``__setitem__`` internally.
 
-.. method:: QueryDict.update(other_dict) 
+.. method:: QueryDict.update(other_dict)
 
     Takes either a ``QueryDict`` or standard dictionary. Just like the standard
     dictionary ``update()`` method, except it *appends* to the current
@@ -309,6 +319,17 @@ a subclass of dictionary. Exceptions are outlined here:
            >>> q = QueryDict('a=1&a=2&a=3')
            >>> q.items()
            [('a', '3')]
+           
+.. method:: QueryDict.iteritems()
+
+    Just like the standard dictionary ``iteritems()`` method. Like
+    :meth:`QueryDict.items()` this uses the same last-value logic as
+    :meth:`QueryDict.__getitem()__`.
+
+.. method:: QueryDict.iterlists()
+
+    Like :meth:`QueryDict.iteritems()` except it includes all values, as a list,
+    for each member of the dictionary.
 
 .. method:: QueryDict.values()
 
@@ -318,6 +339,10 @@ a subclass of dictionary. Exceptions are outlined here:
            >>> q = QueryDict('a=1&a=2&a=3')
            >>> q.values()
            ['3']
+
+.. method:: QueryDict.itervalues()
+
+    Just like :meth:`QueryDict.values()`, except an iterator.
 
 In addition, ``QueryDict`` has the following methods:
 
@@ -350,11 +375,11 @@ In addition, ``QueryDict`` has the following methods:
 
     Like :meth:`items()`, except it includes all values, as a list, for each
     member of the dictionary. For example::
-    
+
          >>> q = QueryDict('a=1&a=2&a=3')
          >>> q.lists()
          [('a', ['1', '2', '3'])]
-    
+
 .. method:: QueryDict.urlencode()
 
     Returns a string of the data in query-string format.
@@ -445,7 +470,7 @@ Methods
 -------
 
 .. method:: HttpResponse.__init__(content='', mimetype=None, status=200, content_type=DEFAULT_CONTENT_TYPE)
-    
+
     Instantiates an ``HttpResponse`` object with the given page content (a
     string) and MIME type. The ``DEFAULT_CONTENT_TYPE`` is ``'text/html'``.
 

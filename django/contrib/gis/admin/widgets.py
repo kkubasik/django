@@ -1,7 +1,15 @@
+from django.conf import settings
 from django.contrib.gis.gdal import OGRException
 from django.contrib.gis.geos import GEOSGeometry, GEOSException
 from django.forms.widgets import Textarea
-from django.template.loader import render_to_string
+from django.template import loader, Context
+from django.utils import translation
+
+# Creating a template context that contains Django settings
+# values needed by admin map templates.
+geo_context = Context({'ADMIN_MEDIA_PREFIX' : settings.ADMIN_MEDIA_PREFIX,
+                       'LANGUAGE_BIDI' : translation.get_language_bidi(),
+                       })
 
 class OpenLayersWidget(Textarea):
     """
@@ -13,7 +21,7 @@ class OpenLayersWidget(Textarea):
 
         # Defaulting the WKT value to a blank string -- this
         # will be tested in the JavaScript and the appropriate
-        # interfaace will be constructed.
+        # interface will be constructed.
         self.params['wkt'] = ''
 
         # If a string reaches here (via a validation error on another
@@ -38,21 +46,23 @@ class OpenLayersWidget(Textarea):
             # Transforming the geometry to the projection used on the
             # OpenLayers map.
             srid = self.params['srid']
-            if value.srid != srid: 
+            if value.srid != srid:
                 try:
-                    value.transform(srid)
-                    wkt = value.wkt
+                    ogr = value.ogr
+                    ogr.transform(srid)
+                    wkt = ogr.wkt
                 except OGRException:
                     wkt = ''
             else:
                 wkt = value.wkt
-               
+
             # Setting the parameter WKT with that of the transformed
             # geometry.
             self.params['wkt'] = wkt
 
-        return render_to_string(self.template, self.params)
-    
+        return loader.render_to_string(self.template, self.params,
+                                       context_instance=geo_context)
+
     def map_options(self):
         "Builds the map options hash for the OpenLayers template."
 
@@ -64,8 +74,8 @@ class OpenLayersWidget(Textarea):
 
         # An array of the parameter name, the name of their OpenLayers
         # counterpart, and the type of variable they are.
-        map_types = [('srid', 'projection', 'srid'), 
-                     ('display_srid', 'displayProjection', 'srid'), 
+        map_types = [('srid', 'projection', 'srid'),
+                     ('display_srid', 'displayProjection', 'srid'),
                      ('units', 'units', str),
                      ('max_resolution', 'maxResolution', float),
                      ('max_extent', 'maxExtent', 'bounds'),

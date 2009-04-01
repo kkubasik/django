@@ -9,6 +9,7 @@ import shutil
 import tempfile
 from django.db import models
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.files.storage import FileSystemStorage
 from django.core.cache import cache
 
@@ -34,6 +35,12 @@ class Storage(models.Model):
     default = models.FileField(storage=temp_storage, upload_to='tests', default='tests/default.txt')
 
 __test__ = {'API_TESTS':"""
+# Attempting to access a FileField from the class raises a descriptive error
+>>> Storage.normal
+Traceback (most recent call last):
+...
+AttributeError: The 'normal' attribute can only be accessed from Storage instances.
+
 # An object without a file has limited functionality.
 
 >>> obj1 = Storage()
@@ -53,6 +60,23 @@ ValueError: The 'normal' attribute has no file associated with it.
 7
 >>> obj1.normal.read()
 'content'
+
+# File objects can be assigned to FileField attributes,  but shouldn't get
+# committed until the model it's attached to is saved.
+
+>>> obj1.normal = SimpleUploadedFile('assignment.txt', 'content')
+>>> dirs, files = temp_storage.listdir('tests')
+>>> dirs
+[]
+>>> files.sort()
+>>> files
+[u'default.txt', u'django_test.txt']
+
+>>> obj1.save()
+>>> dirs, files = temp_storage.listdir('tests')
+>>> files.sort()
+>>> files
+[u'assignment.txt', u'default.txt', u'django_test.txt']
 
 # Files can be read in a little at a time, if necessary.
 

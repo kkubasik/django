@@ -28,7 +28,7 @@ from django.utils.translation import ugettext_lazy as _
 from django.utils.encoding import smart_unicode, smart_str
 
 from util import ErrorList, ValidationError
-from widgets import TextInput, PasswordInput, HiddenInput, MultipleHiddenInput, FileInput, CheckboxInput, Select, NullBooleanSelect, SelectMultiple, DateTimeInput, TimeInput, SplitDateTimeWidget, SplitHiddenDateTimeWidget
+from widgets import TextInput, PasswordInput, HiddenInput, MultipleHiddenInput, FileInput, CheckboxInput, Select, NullBooleanSelect, SelectMultiple, DateInput, DateTimeInput, TimeInput, SplitDateTimeWidget, SplitHiddenDateTimeWidget
 from django.core.files.uploadedfile import SimpleUploadedFile as UploadedFile
 
 __all__ = (
@@ -283,6 +283,7 @@ DEFAULT_DATE_INPUT_FORMATS = (
 )
 
 class DateField(Field):
+    widget = DateInput 
     default_error_messages = {
         'invalid': _(u'Enter a valid date.'),
     }
@@ -446,9 +447,11 @@ class FileField(Field):
         'invalid': _(u"No file was submitted. Check the encoding type on the form."),
         'missing': _(u"No file was submitted."),
         'empty': _(u"The submitted file is empty."),
+        'max_length': _(u'Ensure this filename has at most %(max)d characters (it has %(length)d).'),
     }
 
     def __init__(self, *args, **kwargs):
+        self.max_length = kwargs.pop('max_length', None)
         super(FileField, self).__init__(*args, **kwargs)
 
     def clean(self, data, initial=None):
@@ -465,6 +468,9 @@ class FileField(Field):
         except AttributeError:
             raise ValidationError(self.error_messages['invalid'])
 
+        if self.max_length is not None and len(file_name) > self.max_length:
+            error_values =  {'max': self.max_length, 'length': len(file_name)}
+            raise ValidationError(self.error_messages['max_length'] % error_values)
         if not file_name:
             raise ValidationError(self.error_messages['invalid'])
         if not file_size:
@@ -850,13 +856,13 @@ class SplitDateTimeField(MultiValueField):
         'invalid_time': _(u'Enter a valid time.'),
     }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, input_date_formats=None, input_time_formats=None, *args, **kwargs):
         errors = self.default_error_messages.copy()
         if 'error_messages' in kwargs:
             errors.update(kwargs['error_messages'])
         fields = (
-            DateField(error_messages={'invalid': errors['invalid_date']}),
-            TimeField(error_messages={'invalid': errors['invalid_time']}),
+            DateField(input_formats=input_date_formats, error_messages={'invalid': errors['invalid_date']}),
+            TimeField(input_formats=input_time_formats, error_messages={'invalid': errors['invalid_time']}),
         )
         super(SplitDateTimeField, self).__init__(fields, *args, **kwargs)
 

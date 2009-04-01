@@ -10,10 +10,11 @@ except ImportError:
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import TemporaryUploadedFile, InMemoryUploadedFile
+from django.utils import importlib
 
 __all__ = ['UploadFileException','StopUpload', 'SkipFile', 'FileUploadHandler',
            'TemporaryFileUploadHandler', 'MemoryFileUploadHandler',
-           'load_handler']
+           'load_handler', 'StopFutureHandlers']
 
 class UploadFileException(Exception):
     """
@@ -44,7 +45,7 @@ class SkipFile(UploadFileException):
     This exception is raised by an upload handler that wants to skip a given file.
     """
     pass
-    
+
 class StopFutureHandlers(UploadFileException):
     """
     Upload handers that have handled a file and do not want future handlers to
@@ -201,7 +202,7 @@ def load_handler(path, *args, **kwargs):
     i = path.rfind('.')
     module, attr = path[:i], path[i+1:]
     try:
-        mod = __import__(module, {}, {}, [attr])
+        mod = importlib.import_module(module)
     except ImportError, e:
         raise ImproperlyConfigured('Error importing upload handler module %s: "%s"' % (module, e))
     except ValueError, e:

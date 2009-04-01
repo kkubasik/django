@@ -5,7 +5,7 @@ Model instance reference
 ========================
 
 .. currentmodule:: django.db.models
-   
+
 This document describes the details of the ``Model`` API. It builds on the
 material presented in the :ref:`model <topics-db-models>` and :ref:`database
 query <topics-db-queries>` guides, so you'll probably want to read and
@@ -18,12 +18,13 @@ Throughout this reference we'll use the :ref:`example weblog models
 Creating objects
 ================
 
-To create a new instance of a model, just instantiate it like any other Python class:
+To create a new instance of a model, just instantiate it like any other Python
+class:
 
 .. class:: Model(**kwargs)
 
-The keyword arguments to are simply the names of the fields you've defined on
-your model. Note that instantiating a model in no way touches your database; for
+The keyword arguments are simply the names of the fields you've defined on your
+model. Note that instantiating a model in no way touches your database; for
 that, you need to ``save()``.
 
 Saving objects
@@ -289,7 +290,7 @@ The ``permalink`` decorator
 
 The problem with the way we wrote ``get_absolute_url()`` above is that it
 slightly violates the DRY principle: the URL for this object is defined both
-in the URLConf file and in the model.
+in the URLconf file and in the model.
 
 You can further decouple your models from the URLconf using the ``permalink``
 decorator:
@@ -366,8 +367,7 @@ Extra instance methods
 In addition to ``save()``, ``delete()``, a model object might get any or all
 of the following methods:
 
-get_FOO_display()
------------------
+.. method:: Model.get_FOO_display()
 
 For every field that has ``choices`` set, the object will have a
 ``get_FOO_display()`` method, where ``FOO`` is the name of the field. This
@@ -391,8 +391,8 @@ following model::
     >>> p.get_gender_display()
     'Male'
 
-get_next_by_FOO(\**kwargs) and get_previous_by_FOO(\**kwargs)
--------------------------------------------------------------
+.. method:: Model.get_next_by_FOO(\**kwargs)
+.. method:: Model.get_previous_by_FOO(\**kwargs)
 
 For every ``DateField`` and ``DateTimeField`` that does not have ``null=True``,
 the object will have ``get_next_by_FOO()`` and ``get_previous_by_FOO()``

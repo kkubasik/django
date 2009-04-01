@@ -10,6 +10,12 @@ except NameError:
     # Python 2.3 compat
     from sets import Set as set
 
+try:
+    import decimal
+except ImportError:
+    # Python 2.3 fallback
+    from django.utils import _decimal as decimal
+
 from django.db.backends import util
 from django.utils import datetime_safe
 
@@ -18,10 +24,14 @@ class BaseDatabaseWrapper(local):
     Represents a database connection.
     """
     ops = None
-    def __init__(self, **kwargs):
+    def __init__(self, settings_dict):
+        # `settings_dict` should be a dictionary containing keys such as
+        # DATABASE_NAME, DATABASE_USER, etc. It's called `settings_dict`
+        # instead of `settings` to disambiguate it from Django settings
+        # modules.
         self.connection = None
         self.queries = []
-        self.options = kwargs
+        self.settings_dict = settings_dict
 
     def _commit(self):
         if self.connection is not None:
@@ -30,6 +40,21 @@ class BaseDatabaseWrapper(local):
     def _rollback(self):
         if self.connection is not None:
             return self.connection.rollback()
+
+    def _enter_transaction_management(self, managed):
+        """
+        A hook for backend-specific changes required when entering manual
+        transaction handling.
+        """
+        pass
+
+    def _leave_transaction_management(self, managed):
+        """
+        A hook for backend-specific changes required when leaving manual
+        transaction handling. Will usually be implemented only when
+        _enter_transaction_management() is also required.
+        """
+        pass
 
     def _savepoint(self, sid):
         if not self.features.uses_savepoints:
@@ -53,7 +78,7 @@ class BaseDatabaseWrapper(local):
 
     def cursor(self):
         from django.conf import settings
-        cursor = self._cursor(settings)
+        cursor = self._cursor()
         if settings.DEBUG:
             return self.make_debug_cursor(cursor)
         return cursor
@@ -62,6 +87,7 @@ class BaseDatabaseWrapper(local):
         return util.CursorDebugWrapper(cursor, self)
 
 class BaseDatabaseFeatures(object):
+    allows_group_by_pk = False
     # True if django.db.backend.utils.typecast_timestamp is used on values
     # returned from dates() calls.
     needs_datetime_string_cast = True
@@ -70,6 +96,8 @@ class BaseDatabaseFeatures(object):
     update_can_self_select = True
     interprets_empty_strings_as_nulls = False
     can_use_chunked_reads = True
+    can_return_id_from_insert = False
+    uses_autocommit = False
     uses_savepoints = False
     # If True, don't use integer foreign keys referring to, e.g., positive
     # integer primary keys.
@@ -134,6 +162,14 @@ class BaseDatabaseOperations(object):
         """
         return None
 
+    def fetch_returned_insert_id(self, cursor):
+        """
+        Given a cursor object that has just performed an INSERT...RETURNING
+        statement into a table that has an auto-incrementing ID, returns the
+        newly created ID.
+        """
+        return cursor.fetchone()[0]
+
     def field_cast_sql(self, db_type):
         """
         Given a column type (e.g. 'BLOB', 'VARCHAR'), returns the SQL necessary
@@ -142,6 +178,14 @@ class BaseDatabaseOperations(object):
         searched against.
         """
         return '%s'
+
+    def force_no_ordering(self):
+        """
+        Returns a list used in the "ORDER BY" clause to force no ordering at
+        all. Returning an empty list means that nothing will be included in the
+        ordering.
+        """
+        return []
 
     def fulltext_search_sql(self, field_name):
         """
@@ -202,8 +246,7 @@ class BaseDatabaseOperations(object):
         Returns the value to use for the LIMIT when we are wanting "LIMIT
         infinity". Returns None if the limit clause can be omitted in this case.
         """
-        # FIXME: API may need to change once Oracle backend is repaired.
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def pk_default_value(self):
         """
@@ -211,6 +254,22 @@ class BaseDatabaseOperations(object):
         the field should use its default value.
         """
         return 'DEFAULT'
+
+    def process_clob(self, value):
+        """
+        Returns the value of a CLOB column, for backends that return a locator
+        object that requires additional processing.
+        """
+        return value
+
+    def return_insert_id(self):
+        """
+        For backends that support returning the last insert ID as part
+        of an insert query, this method returns the SQL and params to
+        append to the INSERT query. The returned fragment should
+        contain a format string to hold the appropriate column.
+        """
+        pass
 
     def query_class(self, DefaultQueryClass):
         """
@@ -368,6 +427,40 @@ class BaseDatabaseOperations(object):
         """
         return self.year_lookup_bounds(value)
 
+    def convert_values(self, value, field):
+        """Coerce the value returned by the database backend into a consistent type that
+        is compatible with the field type.
+        """
+        internal_type = field.get_internal_type()
+        if internal_type == 'DecimalField':
+            return value
+        elif internal_type and internal_type.endswith('IntegerField') or internal_type == 'AutoField':
+            return int(value)
+        elif internal_type in ('DateField', 'DateTimeField', 'TimeField'):
+            return value
+        # No field, or the field isn't known to be a decimal or integer
+        # Default to a float
+        return float(value)
+
+    def check_aggregate_support(self, aggregate_func):
+        """Check that the backend supports the provided aggregate
+
+        This is used on specific backends to rule out known aggregates
+        that are known to have faulty implementations. If the named
+        aggregate function has a known problem, the backend should
+        raise NotImplemented.
+        """
+        pass
+
+    def combine_expression(self, connector, sub_expressions):
+        """Combine a list of subexpressions into a single expression, using
+        the provided connecting operator. This is required because operators
+        can vary between backends (e.g., Oracle with %% and &) and between
+        subexpression types (e.g., date expressions)
+        """
+        conn = ' %s ' % connector
+        return conn.join(sub_expressions)
+
 class BaseDatabaseIntrospection(object):
     """
     This class encapsulates all backend-specific introspection utilities
@@ -401,10 +494,12 @@ class BaseDatabaseIntrospection(object):
         tables = set()
         for app in models.get_apps():
             for model in models.get_models(app):
+                if not model._meta.managed:
+                    continue
                 tables.add(model._meta.db_table)
                 tables.update([f.m2m_db_table() for f in model._meta.local_many_to_many])
         if only_existing:
-            tables = [t for t in tables if t in self.table_names()]
+            tables = [t for t in tables if self.table_name_converter(t) in self.table_names()]
         return tables
 
     def installed_models(self, tables):
@@ -427,6 +522,8 @@ class BaseDatabaseIntrospection(object):
 
         for app in apps:
             for model in models.get_models(app):
+                if not model._meta.managed:
+                    continue
                 for f in model._meta.local_fields:
                     if isinstance(f, models.AutoField):
                         sequence_list.append({'table': model._meta.db_table, 'column': f.column})
@@ -445,6 +542,10 @@ class BaseDatabaseClient(object):
     # This should be a string representing the name of the executable
     # (e.g., "psql"). Subclasses must override this.
     executable_name = None
+
+    def __init__(self, connection):
+        # connection is an instance of BaseDatabaseWrapper.
+        self.connection = connection
 
     def runshell(self):
         raise NotImplementedError()

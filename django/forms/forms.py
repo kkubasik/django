@@ -205,6 +205,15 @@ class BaseForm(StrAndUnicode):
         """
         return self.errors.get(NON_FIELD_ERRORS, self.error_class())
 
+    def _raw_value(self, fieldname):
+        """
+        Returns the raw_value for a particular field name. This is just a
+        convenient wrapper around widget.value_from_datadict.
+        """
+        field = self.fields[fieldname]
+        prefix = self.add_prefix(fieldname)
+        return field.widget.value_from_datadict(self.data, self.files, prefix)
+
     def full_clean(self):
         """
         Cleans all of self.data and populates self._errors and
@@ -303,6 +312,20 @@ class BaseForm(StrAndUnicode):
                 return True
         return False
 
+    def hidden_fields(self):
+        """
+        Returns a list of all the BoundField objects that are hidden fields.
+        Useful for manual form layout in templates.
+        """
+        return [field for field in self if field.is_hidden]
+
+    def visible_fields(self):
+        """
+        Returns a list of BoundField objects that aren't hidden fields.
+        The opposite of the hidden_fields() method.
+        """
+        return [field for field in self if not field.is_hidden]
+
 class Form(BaseForm):
     "A collection of Fields, plus their associated data."
     # This is a separate class from BaseForm in order to abstract the way
@@ -363,7 +386,7 @@ class BoundField(StrAndUnicode):
         else:
             name = self.html_initial_name
         return widget.render(name, data, attrs=attrs)
-        
+
     def as_text(self, attrs=None, **kwargs):
         """
         Returns a string of HTML for representing this as an <input type="text">.

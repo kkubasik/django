@@ -186,7 +186,7 @@ if you're ever curious to see the full list of defaults.
 dumpdata
 --------
 
-.. django-admin:: dumpdata <appname appname ...>
+.. django-admin:: dumpdata <appname appname appname.Model ...>
 
 Outputs to standard output all data in the database associated with the named
 application(s).
@@ -213,7 +213,7 @@ the output, you would call::
 If you want to exclude multiple applications, use multiple ``--exclude``
 directives::
 
-    django-admin.py dumpdata --exclude=auth --exclude=contenttype
+    django-admin.py dumpdata --exclude=auth --exclude=contenttypes
 
 
 .. django-admin-option:: --format <fmt>
@@ -227,6 +227,14 @@ directives::
     By default, ``dumpdata`` will output all data on a single line. This isn't
     easy for humans to read, so you can use the ``--indent`` option to
     pretty-print the output with a number of indentation spaces.
+
+.. versionadded:: 1.1
+
+In addition to specifying application names, you can provide a list of
+individual models, in the form of ``appname.Model``. If you specify a model
+name to ``dumpdata``, the dumped output will be restricted to that model,
+rather than the entire application. You can also mix application names and
+model names.
 
 flush
 -----
@@ -333,6 +341,9 @@ would search ``<appname>/fixtures/foo/bar/mydata.json`` for each installed
 application,  ``<dirname>/foo/bar/mydata.json`` for each directory in
 ``FIXTURE_DIRS``, and the literal path ``foo/bar/mydata.json``.
 
+When fixture files are processed, the data is saved to the database as is.
+Model defined ``save`` methods and ``pre_save`` signals are not called.
+
 Note that the order in which fixture files are processed is undefined. However,
 all fixture data is installed as a single transaction, so data in
 one fixture can reference data in another fixture. If the database backend
@@ -422,6 +433,8 @@ Currently supported:
 
 	* ``django`` for all ``*.py`` and ``*.html`` files (default)
 	* ``djangojs`` for ``*.js`` files
+
+.. _django-admin-reset:
 
 reset <appname appname ...>
 ---------------------------
@@ -625,6 +638,8 @@ This command is disabled when the ``--settings`` option to
 ``DJANGO_SETTINGS_MODULE`` has been set. To re-enable it in these
 situations, either omit the ``--settings`` option or unset
 ``DJANGO_SETTINGS_MODULE``.
+
+.. _django-admin-syncdb:
 
 syncdb
 ------

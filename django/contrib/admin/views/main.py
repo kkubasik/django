@@ -32,7 +32,7 @@ ERROR_FLAG = 'e'
 EMPTY_CHANGELIST_VALUE = '(None)'
 
 class ChangeList(object):
-    def __init__(self, request, model, list_display, list_display_links, list_filter, date_hierarchy, search_fields, list_select_related, list_per_page, model_admin):
+    def __init__(self, request, model, list_display, list_display_links, list_filter, date_hierarchy, search_fields, list_select_related, list_per_page, list_editable, model_admin):
         self.model = model
         self.opts = model._meta
         self.lookup_opts = self.opts
@@ -44,6 +44,7 @@ class ChangeList(object):
         self.search_fields = search_fields
         self.list_select_related = list_select_related
         self.list_per_page = list_per_page
+        self.list_editable = list_editable
         self.model_admin = model_admin
 
         # Get search parameters from the query string.
@@ -236,9 +237,6 @@ class ChangeList(object):
                 if '__' in field_name:
                     qs = qs.distinct()
                     break
-
-        if self.is_popup and self.opts.one_to_one_field:
-            qs = qs.complex_filter(self.opts.one_to_one_field.rel.limit_choices_to)
 
         return qs
 

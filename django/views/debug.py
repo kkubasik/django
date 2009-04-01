@@ -6,6 +6,7 @@ import datetime
 from django.conf import settings
 from django.template import Template, Context, TemplateDoesNotExist
 from django.utils.html import escape
+from django.utils.importlib import import_module
 from django.http import HttpResponse, HttpResponseServerError, HttpResponseNotFound
 from django.utils.encoding import smart_unicode, smart_str
 
@@ -67,7 +68,8 @@ class ExceptionReporter:
             self.loader_debug_info = []
             for loader in template_source_loaders:
                 try:
-                    source_list_func = getattr(__import__(loader.__module__, {}, {}, ['get_template_sources']), 'get_template_sources')
+                    module = import_module(loader.__module__)
+                    source_list_func = module.get_template_sources
                     # NOTE: This assumes exc_value is the name of the template that
                     # the loader attempted to load.
                     template_list = [{'name': t, 'exists': os.path.exists(t)} \
@@ -609,6 +611,28 @@ Exception Value: {{ exception_value|escape }}
   {% else %}
     <p>No POST data</p>
   {% endif %}
+  <h3 id="files-info">FILES</h3>
+  {% if request.FILES %}
+    <table class="req">
+        <thead>
+            <tr>
+                <th>Variable</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for var in request.FILES.items %}
+                <tr>
+                    <td>{{ var.0 }}</td>
+                    <td class="code"><div>{{ var.1|pprint }}</div></td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+  {% else %}
+    <p>No FILES data</p>
+  {% endif %}
+  
 
   <h3 id="cookie-info">COOKIES</h3>
   {% if request.COOKIES %}

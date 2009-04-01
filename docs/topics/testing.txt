@@ -138,10 +138,11 @@ and execute those lines while checking that the results match.
 In the case of model tests, note that the test runner takes care of creating
 its own test database. That is, any test that accesses a database -- by
 creating and saving model instances, for example -- will not affect your
-production database. Each doctest begins with a "blank slate" -- a fresh
-database containing an empty table for each model. (See the section on
-fixtures, below, for more on this.) Note that to use this feature, the database
-user Django is connecting as must have ``CREATE DATABASE`` rights.
+production database. However, the database is not refreshed between doctests,
+so if your doctest requires a certain state you should consider flushin the 
+database or loading a fixture. (See the section on fixtures, below, for more 
+on this.) Note that to use this feature, the database user Django is connecting
+as must have ``CREATE DATABASE`` rights.
 
 For more details about how doctest works, see the `standard library
 documentation for doctest`_.
@@ -478,7 +479,8 @@ arguments at time of construction:
     Once you have a ``Client`` instance, you can call any of the following
     methods:
 
-    .. method:: Client.get(path, data={})
+    .. method:: Client.get(path, data={}, follow=False)
+
 
         Makes a GET request on the provided ``path`` and returns a ``Response``
         object, which is documented below.
@@ -493,7 +495,7 @@ arguments at time of construction:
 
             /customers/details/?name=fred&age=7
 
-        .. versionadded:: development
+        .. versionadded:: 1.1
 
         If you already have the GET arguments in URL-encoded form, you can
         use that encoding instead of using the data argument. For example,
@@ -505,7 +507,18 @@ arguments at time of construction:
         If you provide URL both an encoded GET data and a data argument,
         the data argument will take precedence.
 
-    .. method:: Client.post(path, data={}, content_type=MULTIPART_CONTENT)
+        If you set ``follow`` to ``True`` the client will follow any redirects
+        and a ``redirect_chain`` attribute will be set in the response object
+        containing tuples of the intermediate urls and status codes.
+
+        If you had an url ``/redirect_me/`` that redirected to ``/next/``, that
+        redirected to ``/final/``, this is what you'd see::
+
+            >>> response = c.get('/redirect_me/')
+            >>> response.redirect_chain
+            [(u'http://testserver/next/', 302), (u'http://testserver/final/', 302)]
+
+    .. method:: Client.post(path, data={}, content_type=MULTIPART_CONTENT, follow=False)
 
         Makes a POST request on the provided ``path`` and returns a
         ``Response`` object, which is documented below.
@@ -556,7 +569,7 @@ arguments at time of construction:
         Note that you should manually close the file after it has been provided
         to ``post()``.
 
-        .. versionadded:: development
+        .. versionchanged:: 1.1
 
         If the URL you request with a POST contains encoded parameters, these
         parameters will be made available in the request.GET data. For example,
@@ -568,35 +581,55 @@ arguments at time of construction:
         to retrieve the username and password, and could interrogate request.GET
         to determine if the user was a visitor.
 
-    .. method:: Client.head(path, data={})
+        If you set ``follow`` to ``True`` the client will follow any redirects
+        and a ``redirect_chain`` attribute will be set in the response object
+        containing tuples of the intermediate urls and status codes.
 
-        .. versionadded:: development
+    .. method:: Client.head(path, data={}, follow=False)
+
+        .. versionadded:: 1.1
 
         Makes a HEAD request on the provided ``path`` and returns a ``Response``
         object. Useful for testing RESTful interfaces. Acts just like
         :meth:`Client.get` except it does not return a message body.
 
-    .. method:: Client.options(path, data={})
+        If you set ``follow`` to ``True`` the client will follow any redirects
+        and a ``redirect_chain`` attribute will be set in the response object
+        containing tuples of the intermediate urls and status codes.
 
-        .. versionadded:: development
+    .. method:: Client.options(path, data={}, follow=False)
+
+        .. versionadded:: 1.1
 
         Makes an OPTIONS request on the provided ``path`` and returns a
         ``Response`` object. Useful for testing RESTful interfaces.
 
-    .. method:: Client.put(path, data={}, content_type=MULTIPART_CONTENT)
+        If you set ``follow`` to ``True`` the client will follow any redirects
+        and a ``redirect_chain`` attribute will be set in the response object
+        containing tuples of the intermediate urls and status codes.
 
-        .. versionadded:: development
+    .. method:: Client.put(path, data={}, content_type=MULTIPART_CONTENT, follow=False)
+
+        .. versionadded:: 1.1
 
         Makes an PUT request on the provided ``path`` and returns a
         ``Response`` object. Useful for testing RESTful interfaces. Acts just
         like :meth:`Client.post` except with the PUT request method.
 
-    .. method:: Client.delete(path)
+        If you set ``follow`` to ``True`` the client will follow any redirects
+        and a ``redirect_chain`` attribute will be set in the response object
+        containing tuples of the intermediate urls and status codes.
 
-        .. versionadded:: development
+    .. method:: Client.delete(path, follow=False)
+
+        .. versionadded:: 1.1
 
         Makes an DELETE request on the provided ``path`` and returns a
         ``Response`` object. Useful for testing RESTful interfaces.
+
+        If you set ``follow`` to ``True`` the client will follow any redirects
+        and a ``redirect_chain`` attribute will be set in the response object
+        containing tuples of the intermediate urls and status codes.
 
     .. method:: Client.login(**credentials)
 
@@ -679,6 +712,16 @@ Specifically, a ``Response`` object has the following attributes:
 
         If the rendered page used multiple templates, then ``context`` will be a
         list of ``Context`` objects, in the order in which they were rendered.
+
+        .. versionadded:: 1.1
+
+        Regardless of the number of templates used during rendering, you can
+        retrieve context values using the ``[]`` operator. For example, the
+        context variable ``name`` could be retrieved using::
+
+            >>> response = client.get('/foo/')
+            >>> response.context['name']
+            'Arthur'
 
     .. attribute:: request
 
@@ -784,6 +827,52 @@ just change the base class of your test from ``unittest.TestCase`` to
 ``django.test.TestCase``. All of the standard Python unit test functionality
 will continue to be available, but it will be augmented with some useful
 additions.
+
+.. versionadded:: 1.1
+
+.. class:: TransactionTestCase()
+
+Django ``TestCase`` classes make use of database transaction facilities, if
+available, to speed up the process of resetting the database to a known state
+at the beginning of each test. A consequence of this, however, is that the
+effects of transaction commit and rollback cannot be tested by a Django
+``TestCase`` class. If your test requires testing of such transactional
+behavior, you should use a Django ``TransactionTestCase``.
+
+``TransactionTestCase`` and ``TestCase`` are identical except for the manner
+in which the database is reset to a known state and the ability for test code
+to test the effects of commit and rollback. A ``TransactionTestCase`` resets
+the database before the test runs by truncating all tables and reloading
+initial data. A ``TransactionTestCase`` may call commit and rollback and
+observe the effects of these calls on the database.
+
+A ``TestCase``, on the other hand, does not truncate tables and reload initial
+data at the beginning of a test. Instead, it encloses the test code in a
+database transaction that is rolled back at the end of the test.  It also
+prevents the code under test from issuing any commit or rollback operations
+on the database, to ensure that the rollback at the end of the test restores
+the database to its initial state. In order to guarantee that all ``TestCase``
+code starts with a clean database, the Django test runner runs all ``TestCase``
+tests first, before any other tests (e.g. doctests) that may alter the
+database without restoring it to its original state.
+
+When running on a database that does not support rollback (e.g. MySQL with the
+MyISAM storage engine), ``TestCase`` falls back to initializing the database
+by truncating tables and reloading initial data.
+
+
+.. note::
+    The ``TestCase`` use of rollback to un-do the effects of the test code
+    may reveal previously-undetected errors in test code.  For example,
+    test code that assumes primary keys values will be assigned starting at
+    one may find that assumption no longer holds true when rollbacks instead
+    of table truncation are being used to reset the database.  Similarly,
+    the reordering of tests so that all ``TestCase`` classes run first may
+    reveal unexpected dependencies on test case ordering.  In such cases a
+    quick fix is to switch the ``TestCase`` to a ``TransactionTestCase``.
+    A better long-term fix, that allows the test to take advantage of the
+    speed benefit of ``TestCase``, is to fix the underlying test problem.
+
 
 Default test client
 ~~~~~~~~~~~~~~~~~~~
@@ -982,8 +1071,14 @@ applications:
 .. method:: assertRedirects(response, expected_url, status_code=302, target_status_code=200)
 
     Asserts that the response return a ``status_code`` redirect status, it
-    redirected to ``expected_url`` (including any GET data), and the subsequent
+    redirected to ``expected_url`` (including any GET data), and the final
     page was received with ``target_status_code``.
+
+    .. versionadded:: 1.1
+
+    If your request used the ``follow`` argument, the ``expected_url`` and
+    ``target_status_code`` will be the url and status code for the final
+    point of the redirect chain.
 
 E-mail services
 ---------------

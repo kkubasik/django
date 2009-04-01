@@ -23,6 +23,7 @@ how they work. Each ``Field`` instance has a ``clean()`` method, which takes
 a single argument and either raises a ``django.forms.ValidationError``
 exception or returns the clean value::
 
+    >>> from django import forms
     >>> f = forms.EmailField()
     >>> f.clean('foo@example.com')
     u'foo@example.com'
@@ -172,6 +173,16 @@ validation if a particular field's value is not given. ``initial`` values are
     # The form does *not* fall back to using the initial values.
     >>> f.errors
     {'url': [u'This field is required.'], 'name': [u'This field is required.']}
+
+Instead of a constant, you can also pass any callable::
+
+    >>> import datetime
+    >>> class DateForm(forms.Form):
+    ...     day = forms.DateField(initial=datetime.date.today)
+    >>> print DateForm()
+    <tr><th>Day:</th><td><input type="text" name="day" value="12/23/2008" /><td></tr>
+
+The callable will be evaluated only when the unbound form is displayed, not when it is defined.
 
 ``widget``
 ~~~~~~~~~~
@@ -397,7 +408,7 @@ Takes extra arguments:
 
 .. class:: DateField(**kwargs)
 
-    * Default widget: ``TextInput``
+    * Default widget: ``DateInput``
     * Empty value: ``None``
     * Normalizes to: A Python ``datetime.date`` object.
     * Validates that the given value is either a ``datetime.date``,
@@ -418,6 +429,10 @@ If no ``input_formats`` argument is provided, the default input formats are::
     '%d %b %Y', '%d %b, %Y',            # '25 Oct 2006', '25 Oct, 2006'
     '%B %d %Y', '%B %d, %Y',            # 'October 25 2006', 'October 25, 2006'
     '%d %B %Y', '%d %B, %Y',            # '25 October 2006', '25 October, 2006'
+
+.. versionchanged:: 1.1
+   The ``DateField`` previously used a ``TextInput`` widget by default. It now
+   uses a ``DateInput`` widget.
 
 ``DateTimeField``
 ~~~~~~~~~~~~~~~~~
@@ -520,7 +535,7 @@ To learn more about the ``UploadedFile`` object, see the :ref:`file uploads
 documentation <topics-http-file-uploads>`.
 
 When you use a ``FileField`` in a form, you must also remember to
-:ref:`bind the file data to the form <topics-file-uploads>`.
+:ref:`bind the file data to the form <binding-uploaded-files>`.
 
 ``FilePathField``
 ~~~~~~~~~~~~~~~~~
@@ -587,7 +602,7 @@ These control the range of values permitted in the field.
 Using an ImageField requires that the `Python Imaging Library`_ is installed.
 
 When you use an ``ImageField`` on a form, you must also remember to
-:ref:`bind the file data to the form <topics-file-uploads>`.
+:ref:`bind the file data to the form <binding-uploaded-files>`.
 
 .. _Python Imaging Library: http://www.pythonware.com/products/pil/
 
@@ -737,6 +752,36 @@ The following are not yet documented.
 .. class:: MultiValueField(**kwargs)
 
 .. class:: SplitDateTimeField(**kwargs)
+
+    * Default widget: ``SplitDateTimeWidget``
+    * Empty value: ``None``
+    * Normalizes to: A Python ``datetime.datetime`` object.
+    * Validates that the given value is a ``datetime.datetime`` or string
+      formatted in a particular datetime format.
+    * Error message keys: ``required``, ``invalid``
+
+Takes two optional arguments:
+
+.. attribute:: SplitDateTimeField.input_date_formats
+
+    A list of formats used to attempt to convert a string to a valid
+    ``datetime.date`` object.
+
+If no ``input_date_formats`` argument is provided, the default input formats
+for ``DateField`` are used.
+
+.. attribute:: SplitDateTimeField.input_time_formats
+
+    A list of formats used to attempt to convert a string to a valid
+    ``datetime.time`` object.
+
+If no ``input_time_formats`` argument is provided, the default input formats
+for ``TimeField`` are used.
+
+.. versionchanged:: 1.1
+   The ``SplitDateTimeField`` previously used two ``TextInput`` widgets by
+   default. The ``input_date_formats`` and ``input_time_formats`` arguments
+   are also new.
 
 Fields which handle relationships
 ---------------------------------
