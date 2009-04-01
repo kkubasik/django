@@ -75,7 +75,7 @@ def delete(request, comment_id):
             created = created,
             request = request,
         )
-        return next_redirect(request.POST.copy(), None, delete_done, c=comment.pk)
+        return next_redirect(request.POST.copy(), request.GET.get('next',None), delete_done, c=comment.pk)
 
     # Render a form on GET
     else:
