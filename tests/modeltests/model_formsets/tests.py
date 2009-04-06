@@ -9,13 +9,13 @@ class DeletionTests(TestCase):
         data = {
             'form-TOTAL_FORMS': u'1',
             'form-INITIAL_FORMS': u'1',
-            'form-0-id': u'1',
+            'form-0-id': str(poet.pk),
             'form-0-name': u'test',
             'form-0-DELETE': u'on',
         }
         formset = PoetFormSet(data, queryset=Poet.objects.all())
         formset.save()
-        self.assertTrue(formset.is_valid())
+        self.failUnless(formset.is_valid())
         self.assertEqual(Poet.objects.count(), 0)
 
     def test_add_form_deletion_when_invalid(self):

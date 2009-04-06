@@ -6,18 +6,18 @@ class DeletionTests(TestCase):
     def test_deletion(self):
         PoemFormSet = inlineformset_factory(Poet, Poem, can_delete=True)
         poet = Poet.objects.create(name='test')
-        poet.poem_set.create(name='test poem')
+        poem = poet.poem_set.create(name='test poem')
         data = {
             'poem_set-TOTAL_FORMS': u'1',
             'poem_set-INITIAL_FORMS': u'1',
-            'poem_set-0-id': u'1',
-            'poem_set-0-poem': u'1',
+            'poem_set-0-id': str(poem.pk),
+            'poem_set-0-poet': str(poet.pk),
             'poem_set-0-name': u'test',
             'poem_set-0-DELETE': u'on',
         }
         formset = PoemFormSet(data, instance=poet)
         formset.save()
-        self.assertTrue(formset.is_valid())
+        self.failUnless(formset.is_valid())
         self.assertEqual(Poem.objects.count(), 0)
 
     def test_add_form_deletion_when_invalid(self):

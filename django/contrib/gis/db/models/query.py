@@ -1,6 +1,6 @@
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
-from django.db.models.query import sql, QuerySet, Q
+from django.db.models.query import QuerySet, Q, ValuesQuerySet, ValuesListQuerySet
 
 from django.contrib.gis.db.backend import SpatialBackend
 from django.contrib.gis.db.models import aggregates
@@ -9,21 +9,28 @@ from django.contrib.gis.db.models.sql import AreaField, DistanceField, GeomField
 from django.contrib.gis.measure import Area, Distance
 from django.contrib.gis.models import get_srid_info
 
-class GeomSQL(object):
-    "Simple wrapper object for geometric SQL."
-    def __init__(self, geo_sql):
-        self.sql = geo_sql
-
-    def as_sql(self, *args, **kwargs):
-        return self.sql
-
 class GeoQuerySet(QuerySet):
     "The Geographic QuerySet."
 
+    ### Methods overloaded from QuerySet ###
     def __init__(self, model=None, query=None):
         super(GeoQuerySet, self).__init__(model=model, query=query)
         self.query = query or GeoQuery(self.model, connection)
 
+    def values(self, *fields):
+        return self._clone(klass=GeoValuesQuerySet, setup=True, _fields=fields)
+
+    def values_list(self, *fields, **kwargs):
+        flat = kwargs.pop('flat', False)
+        if kwargs:
+            raise TypeError('Unexpected keyword arguments to values_list: %s'
+                    % (kwargs.keys(),))
+        if flat and len(fields) > 1:
+            raise TypeError("'flat' is not valid when values_list is called with more than one field.")
+        return self._clone(klass=GeoValuesListQuerySet, setup=True, flat=flat,
+                           _fields=fields)
+
+    ### GeoQuerySet Methods ###
     def area(self, tolerance=0.05, **kwargs):
         """
         Returns the area of the geographic field in an `area` attribute on
@@ -95,6 +102,32 @@ class GeoQuerySet(QuerySet):
         extent will be returned as a 4-tuple, consisting of (xmin, ymin, xmax, ymax).
         """
         return self._spatial_aggregate(aggregates.Extent, **kwargs)
+
+    def geojson(self, precision=8, crs=False, bbox=False, **kwargs):
+        """
+        Returns a GeoJSON representation of the geomtry field in a `geojson`
+        attribute on each element of the GeoQuerySet.
+
+        The `crs` and `bbox` keywords may be set to True if the users wants
+        the coordinate reference system and the bounding box to be included
+        in the GeoJSON representation of the geometry.
+        """
+        if not SpatialBackend.postgis or not SpatialBackend.geojson:
+            raise NotImplementedError('Only PostGIS 1.3.4+ supports GeoJSON serialization.')
+        
+        if not isinstance(precision, (int, long)):
+            raise TypeError('Precision keyword must be set with an integer.')
+        
+        # Setting the options flag 
+        options = 0
+        if crs and bbox: options = 3
+        elif crs: options = 1
+        elif bbox: options = 2
+        s = {'desc' : 'GeoJSON', 
+             'procedure_args' : {'precision' : precision, 'options' : options},
+             'procedure_fmt' : '%(geo_col)s,%(precision)s,%(options)s',
+             }
+        return self._spatial_attribute('geojson', s, **kwargs)
 
     def gml(self, precision=8, version=2, **kwargs):
         """
@@ -205,6 +238,42 @@ class GeoQuerySet(QuerySet):
                  'select_field' : GeomField(),
                  }
         return self._spatial_attribute('scale', s, **kwargs)
+
+    def snap_to_grid(self, *args, **kwargs):
+        """
+        Snap all points of the input geometry to the grid.  How the
+        geometry is snapped to the grid depends on how many arguments
+        were given:
+          - 1 argument : A single size to snap both the X and Y grids to.
+          - 2 arguments: X and Y sizes to snap the grid to.
+          - 4 arguments: X, Y sizes and the X, Y origins.
+        """
+        if False in [isinstance(arg, (float, int, long)) for arg in args]:
+            raise TypeError('Size argument(s) for the grid must be a float or integer values.')
+
+        nargs = len(args)
+        if nargs == 1:
+            size = args[0]
+            procedure_fmt = '%(geo_col)s,%(size)s'
+            procedure_args = {'size' : size}
+        elif nargs == 2:
+            xsize, ysize = args
+            procedure_fmt = '%(geo_col)s,%(xsize)s,%(ysize)s'
+            procedure_args = {'xsize' : xsize, 'ysize' : ysize}
+        elif nargs == 4:
+            xsize, ysize, xorigin, yorigin = args
+            procedure_fmt = '%(geo_col)s,%(xorigin)s,%(yorigin)s,%(xsize)s,%(ysize)s'
+            procedure_args = {'xsize' : xsize, 'ysize' : ysize,
+                              'xorigin' : xorigin, 'yorigin' : yorigin}
+        else:
+            raise ValueError('Must provide 1, 2, or 4 arguments to `snap_to_grid`.')
+
+        s = {'procedure_fmt' : procedure_fmt,
+             'procedure_args' : procedure_args,
+             'select_field' : GeomField(),
+             }
+
+        return self._spatial_attribute('snap_to_grid', s, **kwargs)
 
     def svg(self, **kwargs):
         """
@@ -592,3 +661,14 @@ class GeoQuerySet(QuerySet):
             return self.query._field_column(geo_field, parent_model._meta.db_table)
         else:
             return self.query._field_column(geo_field)
+
+class GeoValuesQuerySet(ValuesQuerySet):
+    def __init__(self, *args, **kwargs):
+        super(GeoValuesQuerySet, self).__init__(*args, **kwargs)
+        # This flag tells `resolve_columns` to run the values through
+        # `convert_values`.  This ensures that Geometry objects instead
+        # of string values are returned with `values()` or `values_list()`.
+        self.query.geo_values = True
+
+class GeoValuesListQuerySet(GeoValuesQuerySet, ValuesListQuerySet):
+    pass

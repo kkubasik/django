@@ -153,6 +153,28 @@ class Templates(unittest.TestCase):
         split = token.split_contents()
         self.assertEqual(split, ["sometag", '_("Page not found")', 'value|yesno:_("yes,no")'])
 
+    def test_url_reverse_no_settings_module(self):
+        # Regression test for #9005
+        from django.template import Template, Context, TemplateSyntaxError
+
+        old_settings_module = settings.SETTINGS_MODULE
+        old_template_debug = settings.TEMPLATE_DEBUG
+
+        settings.SETTINGS_MODULE = None
+        settings.TEMPLATE_DEBUG = True
+
+        t = Template('{% url will_not_match %}')
+        c = Context()
+        try:
+            rendered = t.render(c)
+        except TemplateSyntaxError, e:
+            # Assert that we are getting the template syntax error and not the
+            # string encoding error.
+            self.assertEquals(e.args[0], "Caught an exception while rendering: Reverse for 'will_not_match' with arguments '()' and keyword arguments '{}' not found.")
+
+        settings.SETTINGS_MODULE = old_settings_module
+        settings.TEMPLATE_DEBUG = old_template_debug
+
     def test_templates(self):
         template_tests = self.get_template_tests()
         filter_tests = filters.get_filter_tests()
@@ -908,7 +930,10 @@ class Templates(unittest.TestCase):
             # Raise exception if we don't have 3 args, last one an integer
             'widthratio08': ('{% widthratio %}', {}, template.TemplateSyntaxError),
             'widthratio09': ('{% widthratio a b %}', {'a':50,'b':100}, template.TemplateSyntaxError),
-            'widthratio10': ('{% widthratio a b 100.0 %}', {'a':50,'b':100}, template.TemplateSyntaxError),
+            'widthratio10': ('{% widthratio a b 100.0 %}', {'a':50,'b':100}, '50'),
+
+            # #10043: widthratio should allow max_width to be a variable
+            'widthratio11': ('{% widthratio a b c %}', {'a':50,'b':100, 'c': 100}, '50'),
 
             ### WITH TAG ########################################################
             'with01': ('{% with dict.key as key %}{{ key }}{% endwith %}', {'dict': {'key':50}}, '50'),
