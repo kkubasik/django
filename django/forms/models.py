@@ -334,7 +334,8 @@ class BaseModelForm(BaseForm):
             fail_message = 'created'
         else:
             fail_message = 'changed'
-        return save_instance(self, self.instance, self._meta.fields, fail_message, commit)
+        return save_instance(self, self.instance, self._meta.fields,
+                             fail_message, commit, exclude=self._meta.exclude)
 
     save.alters_data = True
 
@@ -469,7 +470,10 @@ class BaseModelFormSet(BaseFormSet):
         # data back. Generally, pk.editable should be false, but for some
         # reason, auto_created pk fields and AutoField's editable attribute is
         # True, so check for that as well.
-        if (not pk.editable) or (pk.auto_created or isinstance(pk, AutoField)):
+        def pk_is_editable(pk):
+            return ((not pk.editable) or (pk.auto_created or isinstance(pk, AutoField))
+                or (pk.rel and pk.rel.parent_link and pk_is_editable(pk.rel.to._meta.pk)))
+        if pk_is_editable(pk):
             try:
                 pk_value = self.get_queryset()[index].pk
             except IndexError:
@@ -793,14 +797,14 @@ class ModelMultipleChoiceField(ModelChoiceField):
             return []
         if not isinstance(value, (list, tuple)):
             raise ValidationError(self.error_messages['list'])
-        final_values = []
-        for val in value:
+        for pk in value:
             try:
-                obj = self.queryset.get(pk=val)
-            except self.queryset.model.DoesNotExist:
-                raise ValidationError(self.error_messages['invalid_choice'] % val)
+                self.queryset.filter(pk=pk)
             except ValueError:
-                raise ValidationError(self.error_messages['invalid_pk_value'] % val)
-            else:
-                final_values.append(obj)
-        return final_values
+                raise ValidationError(self.error_messages['invalid_pk_value'] % pk)
+        qs = self.queryset.filter(pk__in=value)
+        pks = set([force_unicode(o.pk) for o in qs])
+        for val in value:
+            if force_unicode(val) not in pks:
+                raise ValidationError(self.error_messages['invalid_choice'] % val)
+        return qs
