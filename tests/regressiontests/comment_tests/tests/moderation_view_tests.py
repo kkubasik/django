@@ -3,7 +3,7 @@ from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from regressiontests.comment_tests.tests import CommentTestCase
 from django.contrib.comments import signals
-
+import re
 class FlagViewTests(CommentTestCase):
 
     def testFlagGet(self):
@@ -92,6 +92,11 @@ class DeleteViewTests(CommentTestCase):
         self.client.login(username="normaluser", password="normaluser")
         response = self.client.post("/delete/%d/" % pk)
         self.assertEqual(response["Location"], "http://testserver/deleted/?c=%d" % pk)
+        
+        response = self.client.post("/delete/%d/" % pk,{"next":"/somewhere/else/"})
+        location = response["Location"]        
+        match = re.search(r"^http://testserver/somewhere/else/\?c=\d+$", location)
+        self.failUnless(match != None, "Unexpected redirect location: %s" % location)
         c = Comment.objects.get(pk=pk)
         self.failUnless(c.is_removed)
         self.assertEqual(c.flags.filter(flag=CommentFlag.MODERATOR_DELETION, user__username="normaluser").count(), 1)
@@ -106,13 +111,14 @@ class DeleteViewTests(CommentTestCase):
 
         # Post a comment and check the signals
         self.testDeletePost()
-        self.assertEqual(received_signals, [signals.comment_was_flagged])
+        self.assertEqual(received_signals, [signals.comment_was_flagged,signals.comment_was_flagged])
 
     def testDeletedView(self):
         comments = self.createSomeComments()
         pk = comments[0].pk        
         response = self.client.get("/deleted/", data={"c":pk})
         self.assertTemplateUsed(response, "comments/deleted.html")
+        
 
 class ApproveViewTests(CommentTestCase):
 
