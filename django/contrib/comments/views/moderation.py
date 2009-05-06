@@ -9,7 +9,7 @@ from django.contrib import comments
 from django.contrib.comments import signals
 
 #@login_required
-def flag(request, comment_id):
+def flag(request, comment_id, next=None):
     """
     Flags a comment. Confirmation on GET, action on POST.
 
@@ -34,7 +34,11 @@ def flag(request, comment_id):
             created = created,
             request = request,
         )
-        return next_redirect(request.POST.copy(), None, flag_done, c=comment.pk)
+        if request.POST.has_key('next'):
+            next = request.POST.get('next')
+        elif request.GET.has_key('next'):
+            next = request.GET.get('next')
+        return next_redirect(request.POST.copy(),next, flag_done, c=comment.pk)
 
     # Render a form on GET
     else:
@@ -46,7 +50,7 @@ def flag(request, comment_id):
 flag = login_required(flag)
 
 #@permission_required("comments.delete_comment")
-def delete(request, comment_id):
+def delete(request, comment_id, next=None):
     """
     Deletes a comment. Confirmation on GET, action on POST. Requires the "can
     moderate comments" permission.
@@ -75,7 +79,11 @@ def delete(request, comment_id):
             created = created,
             request = request,
         )
-        return next_redirect(request.POST.copy(), request.GET.get('next',None), delete_done, c=comment.pk)
+        if request.POST.has_key('next'):
+            next = request.POST.get('next')
+        elif request.GET.has_key('next'):
+            next = request.GET.get('next')
+        return next_redirect(request.POST.copy(), next, delete_done, c=comment.pk)
 
     # Render a form on GET
     else:
