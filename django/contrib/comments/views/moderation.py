@@ -42,8 +42,7 @@ def flag(request, comment_id, next=None):
 
     # Render a form on GET
     else:
-        if request.GET.has_key('next'):
-            next = request.GET.get('next')
+        next = request.GET.get('next',next)
         return render_to_response('comments/flag.html',
             {'comment': comment, "next": next},
             template.RequestContext(request)
@@ -88,8 +87,7 @@ def delete(request, comment_id, next=None):
 
     # Render a form on GET
     else:
-        if request.GET.has_key('next'):
-            next = request.GET.get('next')
+        next = request.GET.get('next',next)
         return render_to_response('comments/delete.html',
             {'comment': comment, "next": next},
             template.RequestContext(request)
@@ -97,7 +95,7 @@ def delete(request, comment_id, next=None):
 delete = permission_required("comments.can_moderate")(delete)
 
 #@permission_required("comments.can_moderate")
-def approve(request, comment_id):
+def approve(request, comment_id, next=None):
     """
     Approve a comment (that is, mark it as public and non-removed). Confirmation
     on GET, action on POST. Requires the "can moderate comments" permission.
@@ -137,8 +135,7 @@ def approve(request, comment_id):
 
     # Render a form on GET
     else:
-        if request.GET.has_key('next'):
-            next = request.GET.get('next')
+        next = request.GET.get('next',next)
         return render_to_response('comments/approve.html',
             {'comment': comment, "next": next},
             template.RequestContext(request)
