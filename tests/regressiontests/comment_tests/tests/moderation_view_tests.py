@@ -3,6 +3,7 @@ from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from regressiontests.comment_tests.tests import CommentTestCase
 from django.contrib.comments import signals
+from django.contrib.comments.views.moderation import delete
 import re
 class FlagViewTests(CommentTestCase):
 
@@ -118,6 +119,15 @@ class DeleteViewTests(CommentTestCase):
         pk = comments[0].pk        
         response = self.client.get("/deleted/", data={"c":pk})
         self.assertTemplateUsed(response, "comments/deleted.html")
+        
+    def testDeletedViewNextGet(self):
+        comments = self.createSomeComments()
+        pk = comments[0].pk        
+        makeModerator("normaluser")
+        self.client.login(username="normaluser", password="normaluser")
+        response = self.client.get("/delete/%d/" % pk, data={"next":"/somewhere/else"})
+        self.assertEqual(response.context[1]['next'],"/somewhere/else")
+        self.assertTemplateUsed(response, "comments/delete.html")
         
 
 class ApproveViewTests(CommentTestCase):
