@@ -23,7 +23,20 @@ models. For example, here's the user module from Django's built-in
 :mod:`django.contrib.auth` app:
 
 .. image:: _images/user_actions.png
+
+.. warning::
+
+    The "delete selected objects" action uses :meth:`QuerySet.delete()
+    <django.db.models.QuerySet.delete>` for efficiency reasons, which has an
+    important caveat: your model's ``delete()`` method will not be called.
     
+    If you wish to override this behavior, simply write a custom action which
+    accomplishes deletion in your preferred manner -- for example, by calling
+    ``Model.delete()`` for each of the selected items.
+    
+    For more background on bulk deletion, see the documentation on :ref:`object
+    deletion <topics-db-queries-delete>`.
+
 Read on to find out how to add your own actions to this list.
 
 Writing actions
@@ -187,7 +200,7 @@ Actions that provide intermediate pages
 ---------------------------------------
 
 By default, after an action is performed the user is simply redirected back
-the the original change list page. However, some actions, especially more
+to the original change list page. However, some actions, especially more
 complex ones, will need to return intermediate pages. For example, the
 built-in delete action asks for confirmation before deleting the selected
 objects.
@@ -203,7 +216,7 @@ objects as JSON::
 
     def export_as_json(modeladmin, request, queryset):
         response = HttpResponse(mimetype="text/javascript")
-        serialize.serialize(queryset, stream=response)
+        serializers.serialize("json", queryset, stream=response)
         return response
 
 Generally, something like the above isn't considered a great idea. Most of the

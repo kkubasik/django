@@ -197,19 +197,21 @@ class ChangeList(object):
             raise IncorrectLookupParameters
 
         # Use select_related() if one of the list_display options is a field
-        # with a relationship.
-        if self.list_select_related:
-            qs = qs.select_related()
-        else:
-            for field_name in self.list_display:
-                try:
-                    f = self.lookup_opts.get_field(field_name)
-                except models.FieldDoesNotExist:
-                    pass
-                else:
-                    if isinstance(f.rel, models.ManyToOneRel):
-                        qs = qs.select_related()
-                        break
+        # with a relationship and the provided queryset doesn't already have
+        # select_related defined.
+        if not qs.query.select_related:
+            if self.list_select_related:
+                qs = qs.select_related()
+            else:
+                for field_name in self.list_display:
+                    try:
+                        f = self.lookup_opts.get_field(field_name)
+                    except models.FieldDoesNotExist:
+                        pass
+                    else:
+                        if isinstance(f.rel, models.ManyToOneRel):
+                            qs = qs.select_related()
+                            break
 
         # Set ordering.
         if self.order_field:
@@ -229,10 +231,7 @@ class ChangeList(object):
         if self.search_fields and self.query:
             for bit in self.query.split():
                 or_queries = [models.Q(**{construct_search(str(field_name)): bit}) for field_name in self.search_fields]
-                other_qs = QuerySet(self.model)
-                other_qs.dup_select_related(qs)
-                other_qs = other_qs.filter(reduce(operator.or_, or_queries))
-                qs = qs & other_qs
+                qs = qs.filter(reduce(operator.or_, or_queries))
             for field_name in self.search_fields:
                 if '__' in field_name:
                     qs = qs.distinct()

@@ -1,7 +1,7 @@
 # coding: utf-8
 import pickle
 
-from django.db import models
+from django.db import connection, models
 from django.conf import settings
 
 try:
@@ -18,7 +18,7 @@ class Author(models.Model):
         return self.name
 
 class Publisher(models.Model):
-    name = models.CharField(max_length=300)
+    name = models.CharField(max_length=255)
     num_awards = models.IntegerField()
 
     def __unicode__(self):
@@ -26,7 +26,7 @@ class Publisher(models.Model):
 
 class Book(models.Model):
     isbn = models.CharField(max_length=9)
-    name = models.CharField(max_length=300)
+    name = models.CharField(max_length=255)
     pages = models.IntegerField()
     rating = models.FloatField()
     price = models.DecimalField(decimal_places=2, max_digits=6)
@@ -42,7 +42,7 @@ class Book(models.Model):
         return self.name
 
 class Store(models.Model):
-    name = models.CharField(max_length=300)
+    name = models.CharField(max_length=255)
     books = models.ManyToManyField(Book)
     original_opening = models.DateTimeField()
     friday_night_closing = models.TimeField()
@@ -321,10 +321,26 @@ FieldError: Cannot compute Avg('mean_age'): 'mean_age' is an aggregate
 """
 }
 
-if settings.DATABASE_ENGINE != 'sqlite3':
-    __test__['API_TESTS'] += """
-# Stddev and Variance are not guaranteed to be available for SQLite.
+def run_stddev_tests():
+    """Check to see if StdDev/Variance tests should be run.
 
+    Stddev and Variance are not guaranteed to be available for SQLite, and
+    are not available for PostgreSQL before 8.2.
+    """
+    if settings.DATABASE_ENGINE == 'sqlite3':
+        return False
+
+    class StdDevPop(object):
+        sql_function = 'STDDEV_POP'
+
+    try:
+        connection.ops.check_aggregate_support(StdDevPop())
+    except:
+        return False
+    return True
+
+if run_stddev_tests():
+    __test__['API_TESTS'] += """
 >>> Book.objects.aggregate(StdDev('pages'))
 {'pages__stddev': 311.46...}
 

@@ -17,11 +17,10 @@ from django.db.models.loading import cache
 
 class FieldFile(File):
     def __init__(self, instance, field, name):
+        super(FieldFile, self).__init__(None, name)
         self.instance = instance
         self.field = field
         self.storage = field.storage
-        self._name = name or u''
-        self._closed = False
         self._committed = True
 
     def __eq__(self, other):
@@ -48,10 +47,17 @@ class FieldFile(File):
 
     def _get_file(self):
         self._require_file()
-        if not hasattr(self, '_file'):
+        if not hasattr(self, '_file') or self._file is None:
             self._file = self.storage.open(self.name, 'rb')
         return self._file
-    file = property(_get_file)
+
+    def _set_file(self, file):
+        self._file = file
+
+    def _del_file(self):
+        del self._file
+
+    file = property(_get_file, _set_file, _del_file)
 
     def _get_path(self):
         self._require_file()
@@ -65,12 +71,14 @@ class FieldFile(File):
 
     def _get_size(self):
         self._require_file()
+        if not self._committed:
+            return len(self.file)
         return self.storage.size(self.name)
     size = property(_get_size)
 
     def open(self, mode='rb'):
         self._require_file()
-        return super(FieldFile, self).open(mode)
+        self.file.open(mode)
     # open() doesn't alter the file's contents, but it does reset the pointer
     open.alters_data = True
 
@@ -80,7 +88,7 @@ class FieldFile(File):
 
     def save(self, name, content, save=True):
         name = self.field.generate_filename(self.instance, name)
-        self._name = self.storage.save(name, content)
+        self.name = self.storage.save(name, content)
         setattr(self.instance, self.field.name, self.name)
 
         # Update the filesize cache
@@ -97,11 +105,11 @@ class FieldFile(File):
         # presence of self._file
         if hasattr(self, '_file'):
             self.close()
-            del self._file
-            
+            del self.file
+
         self.storage.delete(self.name)
 
-        self._name = None
+        self.name = None
         setattr(self.instance, self.field.name, self.name)
 
         # Delete the filesize cache
@@ -113,47 +121,100 @@ class FieldFile(File):
             self.instance.save()
     delete.alters_data = True
 
+    def _get_closed(self):
+        file = getattr(self, '_file', None)
+        return file is None or file.closed
+    closed = property(_get_closed)
+
+    def close(self):
+        file = getattr(self, '_file', None)
+        if file is not None:
+            file.close()
+
     def __getstate__(self):
         # FieldFile needs access to its associated model field and an instance
         # it's attached to in order to work properly, but the only necessary
         # data to be pickled is the file's name itself. Everything else will
         # be restored later, by FileDescriptor below.
-        return {'_name': self.name, '_closed': False, '_committed': True}
+        return {'name': self.name, 'closed': False, '_committed': True, '_file': None}
 
 class FileDescriptor(object):
+    """
+    The descriptor for the file attribute on the model instance. Returns a
+    FieldFile when accessed so you can do stuff like::
+    
+        >>> instance.file.size
+        
+    Assigns a file object on assignment so you can do::
+    
+        >>> instance.file = File(...)
+        
+    """
     def __init__(self, field):
         self.field = field
 
     def __get__(self, instance=None, owner=None):
         if instance is None:
-            raise AttributeError("The '%s' attribute can only be accessed from %s instances." % (self.field.name, owner.__name__))
+            raise AttributeError(
+                "The '%s' attribute can only be accessed from %s instances." 
+                % (self.field.name, owner.__name__))
+                
+        # This is slightly complicated, so worth an explanation.
+        # instance.file`needs to ultimately return some instance of `File`,
+        # probably a subclass. Additionally, this returned object needs to have
+        # the FieldFile API so that users can easily do things like
+        # instance.file.path and have that delegated to the file storage engine.
+        # Easy enough if we're strict about assignment in __set__, but if you
+        # peek below you can see that we're not. So depending on the current
+        # value of the field we have to dynamically construct some sort of
+        # "thing" to return.
+        
+        # The instance dict contains whatever was originally assigned 
+        # in __set__.
         file = instance.__dict__[self.field.name]
+
+        # If this value is a string (instance.file = "path/to/file") or None
+        # then we simply wrap it with the appropriate attribute class according
+        # to the file field. [This is FieldFile for FileFields and
+        # ImageFieldFile for ImageFields; it's also conceivable that user
+        # subclasses might also want to subclass the attribute class]. This
+        # object understands how to convert a path to a file, and also how to
+        # handle None.
         if isinstance(file, basestring) or file is None:
-            # Create a new instance of FieldFile, based on a given file name
-            instance.__dict__[self.field.name] = self.field.attr_class(instance, self.field, file)
+            attr = self.field.attr_class(instance, self.field, file)
+            instance.__dict__[self.field.name] = attr
+
+        # Other types of files may be assigned as well, but they need to have
+        # the FieldFile interface added to the. Thus, we wrap any other type of
+        # File inside a FieldFile (well, the field's attr_class, which is 
+        # usually FieldFile).
         elif isinstance(file, File) and not isinstance(file, FieldFile):
-            # Other types of files may be assigned as well, but they need to
-            # have the FieldFile interface added to them
-            file_copy = copy.copy(file)
-            file_copy.__class__ = type(file.__class__.__name__, 
-                                       (file.__class__, self.field.attr_class), {})
-            file_copy.instance = instance
-            file_copy.field = self.field
-            file_copy.storage = self.field.storage
+            file_copy = self.field.attr_class(instance, self.field, file.name)
+            file_copy.file = file
             file_copy._committed = False
             instance.__dict__[self.field.name] = file_copy
+            
+        # Finally, because of the (some would say boneheaded) way pickle works,
+        # the underlying FieldFile might not actually itself have an associated
+        # file. So we need to reset the details of the FieldFile in those cases.
         elif isinstance(file, FieldFile) and not hasattr(file, 'field'):
-            # The FieldFile was pickled, so some attributes need to be reset.
             file.instance = instance
             file.field = self.field
             file.storage = self.field.storage
+        
+        # That was fun, wasn't it?
         return instance.__dict__[self.field.name]
 
     def __set__(self, instance, value):
         instance.__dict__[self.field.name] = value
 
 class FileField(Field):
+    # The class to wrap instance attributes in. Accessing the file object off
+    # the instance will always return an instance of attr_class.
     attr_class = FieldFile
+    
+    # The descriptor to use for accessing the attribute off of the class.
+    descriptor_class = FileDescriptor
 
     def __init__(self, verbose_name=None, name=None, upload_to='', storage=None, **kwargs):
         for arg in ('primary_key', 'unique'):
@@ -193,7 +254,7 @@ class FileField(Field):
 
     def contribute_to_class(self, cls, name):
         super(FileField, self).contribute_to_class(cls, name)
-        setattr(cls, self.name, FileDescriptor(self))
+        setattr(cls, self.name, self.descriptor_class(self))
         signals.post_delete.connect(self.delete_file, sender=cls)
 
     def delete_file(self, instance, sender, **kwargs):
@@ -233,19 +294,48 @@ class FileField(Field):
         defaults.update(kwargs)
         return super(FileField, self).formfield(**defaults)
 
-class ImageFieldFile(ImageFile, FieldFile):
-    def save(self, name, content, save=True):
-        # Repopulate the image dimension cache.
-        self._dimensions_cache = get_image_dimensions(content)
-
-        # Update width/height fields, if needed
+class ImageFileDescriptor(FileDescriptor):
+    """
+    Just like the FileDescriptor, but for ImageFields. The only difference is
+    assigning the width/height to the width_field/height_field, if appropriate.
+    """
+    def __set__(self, instance, value):
+        super(ImageFileDescriptor, self).__set__(instance, value)
+        
+        # The rest of this method deals with width/height fields, so we can
+        # bail early if neither is used.
+        if not self.field.width_field and not self.field.height_field:
+            return
+        
+        # We need to call the descriptor's __get__ to coerce this assigned 
+        # value into an instance of the right type (an ImageFieldFile, in this
+        # case).
+        value = self.__get__(instance)
+        
+        if not value:
+            return
+        
+        # Get the image dimensions, making sure to leave the file in the same
+        # state (opened or closed) that we got it in. However, we *don't* rewind
+        # the file pointer if the file is already open. This is in keeping with
+        # most Python standard library file operations that leave it up to the
+        # user code to reset file pointers after operations that move it.
+        from django.core.files.images import get_image_dimensions
+        close = value.closed
+        value.open()
+        try:
+            width, height = get_image_dimensions(value)
+        finally:
+            if close:
+                value.close()
+        
+        # Update the width and height fields
         if self.field.width_field:
-            setattr(self.instance, self.field.width_field, self.width)
+            setattr(value.instance, self.field.width_field, width)
         if self.field.height_field:
-            setattr(self.instance, self.field.height_field, self.height)
+            setattr(value.instance, self.field.height_field, height)
 
-        super(ImageFieldFile, self).save(name, content, save)
-
+class ImageFieldFile(ImageFile, FieldFile):
     def delete(self, save=True):
         # Clear the image dimensions cache
         if hasattr(self, '_dimensions_cache'):
@@ -254,6 +344,7 @@ class ImageFieldFile(ImageFile, FieldFile):
 
 class ImageField(FileField):
     attr_class = ImageFieldFile
+    descriptor_class = ImageFileDescriptor
 
     def __init__(self, verbose_name=None, name=None, width_field=None, height_field=None, **kwargs):
         self.width_field, self.height_field = width_field, height_field
