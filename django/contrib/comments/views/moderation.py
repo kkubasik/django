@@ -38,11 +38,11 @@ def flag(request, comment_id, next=None):
             next = request.POST.get('next')
         elif request.GET.has_key('next'):
             next = request.GET.get('next')
-        return next_redirect(request.POST.copy(),next, flag_done, c=comment.pk)
+        return next_redirect(request.POST.copy(), next, flag_done, c=comment.pk)
 
     # Render a form on GET
     else:
-        next = request.GET.get('next',next)
+        next = request.GET.get('next', next)
         return render_to_response('comments/flag.html',
             {'comment': comment, "next": next},
             template.RequestContext(request)
@@ -87,7 +87,7 @@ def delete(request, comment_id, next=None):
 
     # Render a form on GET
     else:
-        next = request.GET.get('next',next)
+        next = request.GET.get('next', next)
         return render_to_response('comments/delete.html',
             {'comment': comment, "next": next},
             template.RequestContext(request)
@@ -135,7 +135,7 @@ def approve(request, comment_id, next=None):
 
     # Render a form on GET
     else:
-        next = request.GET.get('next',next)
+        next = request.GET.get('next', next)
         return render_to_response('comments/approve.html',
             {'comment': comment, "next": next},
             template.RequestContext(request)

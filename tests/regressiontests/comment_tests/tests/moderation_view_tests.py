@@ -36,7 +36,7 @@ class FlagViewTests(CommentTestCase):
     def testFlagAnon(self):
         """GET/POST the flag view while not logged in: redirect to log in."""
         comments = self.createSomeComments()
-        pk = comments[0].pk        
+        pk = comments[0].pk
         response = self.client.get("/flag/%d/" % pk)
         self.assertEqual(response["Location"], "http://testserver/accounts/login/?next=/flag/%d/" % pk)
         response = self.client.post("/flag/%d/" % pk)
@@ -44,8 +44,8 @@ class FlagViewTests(CommentTestCase):
 
     def testFlaggedView(self):
         comments = self.createSomeComments()
-        pk = comments[0].pk        
-        response = self.client.get("/flagged/", data={"c":pk})
+        pk = comments[0].pk
+        response = self.client.get("/flagged/", data={"c": pk})
         self.assertTemplateUsed(response, "comments/flagged.html")
 
     def testFlagSignals(self):
@@ -76,7 +76,7 @@ class DeleteViewTests(CommentTestCase):
     def testDeletePermissions(self):
         """The delete view should only be accessible to 'moderators'"""
         comments = self.createSomeComments()
-        pk = comments[0].pk        
+        pk = comments[0].pk
         self.client.login(username="normaluser", password="normaluser")
         response = self.client.get("/delete/%d/" % pk)
         self.assertEqual(response["Location"], "http://testserver/accounts/login/?next=/delete/%d/" % pk)
@@ -93,9 +93,9 @@ class DeleteViewTests(CommentTestCase):
         self.client.login(username="normaluser", password="normaluser")
         response = self.client.post("/delete/%d/" % pk)
         self.assertEqual(response["Location"], "http://testserver/deleted/?c=%d" % pk)
-        
-        response = self.client.post("/delete/%d/" % pk,{"next":"/somewhere/else/"})
-        location = response["Location"]        
+
+        response = self.client.post("/delete/%d/" % pk, {"next": "/somewhere/else/"})
+        location = response["Location"]
         match = re.search(r"^http://testserver/somewhere/else/\?c=\d+$", location)
         self.failUnless(match != None, "Unexpected redirect location: %s" % location)
         c = Comment.objects.get(pk=pk)
@@ -112,30 +112,30 @@ class DeleteViewTests(CommentTestCase):
 
         # Post a comment and check the signals
         self.testDeletePost()
-        self.assertEqual(received_signals, [signals.comment_was_flagged,signals.comment_was_flagged])
+        self.assertEqual(received_signals, [signals.comment_was_flagged, signals.comment_was_flagged])
 
     def testDeletedView(self):
         comments = self.createSomeComments()
-        pk = comments[0].pk        
-        response = self.client.get("/deleted/", data={"c":pk})
+        pk = comments[0].pk
+        response = self.client.get("/deleted/", data={"c": pk})
         self.assertTemplateUsed(response, "comments/deleted.html")
-        
+
     def testDeletedViewNextGet(self):
         comments = self.createSomeComments()
-        pk = comments[0].pk        
+        pk = comments[0].pk
         makeModerator("normaluser")
         self.client.login(username="normaluser", password="normaluser")
-        response = self.client.get("/delete/%d/" % pk, data={"next":"/somewhere/else"})
-        self.assertEqual(response.context[1]['next'],"/somewhere/else")
+        response = self.client.get("/delete/%d/" % pk, data={"next": "/somewhere/else"})
+        self.assertEqual(response.context[1]['next'], "/somewhere/else")
         self.assertTemplateUsed(response, "comments/delete.html")
-        
+
 
 class ApproveViewTests(CommentTestCase):
 
     def testApprovePermissions(self):
         """The delete view should only be accessible to 'moderators'"""
         comments = self.createSomeComments()
-        pk = comments[0].pk        
+        pk = comments[0].pk
         self.client.login(username="normaluser", password="normaluser")
         response = self.client.get("/approve/%d/" % pk)
         self.assertEqual(response["Location"], "http://testserver/accounts/login/?next=/approve/%d/" % pk)
@@ -147,7 +147,8 @@ class ApproveViewTests(CommentTestCase):
     def testApprovePost(self):
         """POSTing the delete view should mark the comment as removed"""
         c1, c2, c3, c4 = self.createSomeComments()
-        c1.is_public = False; c1.save()
+        c1.is_public = False
+        c1.save()
 
         makeModerator("normaluser")
         self.client.login(username="normaluser", password="normaluser")
@@ -171,8 +172,8 @@ class ApproveViewTests(CommentTestCase):
 
     def testApprovedView(self):
         comments = self.createSomeComments()
-        pk = comments[0].pk        
-        response = self.client.get("/approved/", data={"c":pk})
+        pk = comments[0].pk
+        response = self.client.get("/approved/", data={"c": pk})
         self.assertTemplateUsed(response, "comments/approved.html")
 
 
@@ -195,7 +196,8 @@ class ModerationQueueTests(CommentTestCase):
         self.client.login(username="normaluser", password="normaluser")
 
         c1.is_public = c2.is_public = False
-        c1.save(); c2.save()
+        c1.save()
+        c2.save()
         response = self.client.get("/moderate/")
         self.assertEqual(list(response.context[0]["comments"]), [c1, c2])
 
