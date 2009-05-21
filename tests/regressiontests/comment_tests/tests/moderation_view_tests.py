@@ -135,8 +135,9 @@ class DeleteViewTests(CommentTestCase):
         makeModerator("normaluser")
         self.client.login(username="normaluser", password="normaluser")
         response = self.client.post("/delete/%d/?next=/somewhere/else" % pk, data={"next": "/somewhere/new"})
-        self.assertEqual(response.context[1]['next'], "/somewhere/new")
-        self.assertTemplateUsed(response, "comments/delete.html")
+        location = response["Location"]
+        match = re.search(r"^http://testserver/somewhere/new\?c=\d+$", location)
+        self.failUnless(match != None, "Unexpected redirect location: %s" % location)
 
 
 class ApproveViewTests(CommentTestCase):
