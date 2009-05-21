@@ -129,6 +129,15 @@ class DeleteViewTests(CommentTestCase):
         self.assertEqual(response.context[1]['next'], "/somewhere/else")
         self.assertTemplateUsed(response, "comments/delete.html")
 
+    def testDeletedViewNextGetPost(self):
+        comments = self.createSomeComments()
+        pk = comments[0].pk
+        makeModerator("normaluser")
+        self.client.login(username="normaluser", password="normaluser")
+        response = self.client.post("/delete/%d/?next=/somewhere/else" % pk, data={"next": "/somewhere/new"})
+        self.assertEqual(response.context[1]['next'], "/somewhere/new")
+        self.assertTemplateUsed(response, "comments/delete.html")
+
 
 class ApproveViewTests(CommentTestCase):
 
