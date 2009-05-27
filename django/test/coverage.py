@@ -5,7 +5,7 @@ from django.db.models import get_app, get_apps
 from django.test.simple import run_tests as base_run_tests
 
 from django.utils.module_tools import get_all_modules
-from utils.coverage_report import html_report
+from django.test.coverage_report import html_report
 
 def _get_app_package(app_model_module):
     """

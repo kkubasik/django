@@ -156,7 +156,7 @@ def django_tests(verbosity, interactive, test_labels):
     from django.test.utils import get_runner
     if not hasattr(settings, 'TEST_RUNNER'):
         settings.TEST_RUNNER = 'django.test.simple.run_tests'
-    test_runner = get_runner(settings)
+    test_runner = get_runner(settings, coverage=True)
 
     failures = test_runner(test_labels, verbosity=verbosity, interactive=interactive, extra_tests=extra_tests)
     if failures:
