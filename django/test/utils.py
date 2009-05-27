@@ -80,8 +80,11 @@ def teardown_test_environment():
     del mail.outbox
 
 
-def get_runner(settings):
-    test_path = settings.TEST_RUNNER.split('.')
+def get_runner(settings, coverage = False):
+    if(coverage):
+        test_path = settings.COVERAGE_TEST_RUNNER.split('.')
+    else:
+        test_path = settings.TEST_RUNNER.split('.')
     # Allow for Python 2.5 relative paths
     if len(test_path) > 1:
         test_module_name = '.'.join(test_path[:-1])
