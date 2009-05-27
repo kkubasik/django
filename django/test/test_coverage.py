@@ -1,4 +1,5 @@
-import coverage, os, sys
+import coverage
+import os, sys
 
 from django.conf import settings
 from django.db.models import get_app, get_apps
@@ -19,7 +20,7 @@ def run_tests(test_labels, verbosity=1, interactive=True,
     Test runner which displays a code coverage report at the end of the
     run.
     """
-    coverage.use_cache(0)
+    #coverage.use_cache(0)
     for e in getattr(settings, 'COVERAGE_CODE_EXCLUDES', []):
         coverage.exclude(e)
     coverage.start()
