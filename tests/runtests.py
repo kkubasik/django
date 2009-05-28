@@ -100,7 +100,7 @@ def django_tests(verbosity, interactive, test_labels):
     # Redirect some settings for the duration of these tests.
     settings.INSTALLED_APPS = ALWAYS_INSTALLED_APPS
     settings.ROOT_URLCONF = 'urls'
-    settings.TEMPLATE_DIRS = (os.path.join(os.path.dirname(__file__), TEST_TEMPLATE_DIR),)
+    settings.TEMPLATE_DIRS = (os.path.join(os.path.dirname(__file__), TEST_TEMPLATE_DIR), )
     settings.USE_I18N = True
     settings.LANGUAGE_CODE = 'en'
     settings.LOGIN_URL = '/accounts/login/'
@@ -113,7 +113,7 @@ def django_tests(verbosity, interactive, test_labels):
     # For testing comment-utils, we require the MANAGERS attribute
     # to be set, so that a test email is sent out which we catch
     # in our tests.
-    settings.MANAGERS = ("admin@djangoproject.com",)
+    settings.MANAGERS = ("admin@djangoproject.com", )
 
     # Load all the ALWAYS_INSTALLED_APPS.
     # (This import statement is intentionally delayed until after we
