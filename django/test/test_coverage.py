@@ -57,11 +57,5 @@ def run_tests(test_labels, verbosity=1, interactive=True,
             print >>sys.stderr, e,
         print >>sys.stdout
 
-    outdir = getattr(settings, 'COVERAGE_REPORT_HTML_OUTPUT_DIR', 'test_html')
-    outdir = os.path.abspath(outdir)
-    html_report(outdir, modules, excludes, errors)
-    print >>sys.stdout
-    print >>sys.stdout, "HTML reports were output to '%s'" %outdir
-
     return results
 
