@@ -8,6 +8,8 @@ class Command(BaseCommand):
             help='Tells Django to NOT prompt the user for input of any kind.'),
         make_option('--coverage', action='store_true', dest='coverage', default=False,
                     help='Tells Django to run the coverage runner'),
+        make_option('--reports', action='store_true', dest='reports', default=False,
+                    help='Tells Django to output coverage results as HTML reports'),
     )
     help = 'Runs the test suite for the specified applications, or the entire site if no apps are specified.'
     args = '[appname ...]'
@@ -21,9 +23,9 @@ class Command(BaseCommand):
         verbosity = int(options.get('verbosity', 1))
         interactive = options.get('interactive', True)
         cover = options.get('coverage', False)
-        print cover
-        test_runner = get_runner(settings, coverage=cover)
-
-        failures = test_runner(test_labels, verbosity=verbosity, interactive=interactive)
+        report = options.get('reports', False)
+        test_runner = get_runner(settings, coverage=cover, reports=report)
+        tr = test_runner()
+        failures = tr.run_tests(test_labels, verbosity=verbosity, interactive=interactive)
         if failures:
             sys.exit(failures)

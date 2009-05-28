@@ -82,7 +82,10 @@ def teardown_test_environment():
 
 def get_runner(settings, coverage = False, reports = False):
     if(coverage):
-        test_path = settings.COVERAGE_TEST_RUNNER.split('.')
+        if(reports):
+            test_path = 'django.test.test_coverage.ReportingCoverageRunner'.split('.')
+        else:
+            test_path = settings.COVERAGE_TEST_RUNNER.split('.')
     else:
         test_path = settings.TEST_RUNNER.split('.')
     # Allow for Python 2.5 relative paths
