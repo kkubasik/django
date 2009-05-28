@@ -379,7 +379,7 @@ PASSWORD_RESET_TIMEOUT_DAYS = 3
 ###########
 
 # The name of the method to use to invoke the test suite
-TEST_RUNNER = 'django.test.simple.run_tests'
+TEST_RUNNER = 'django.test.simple.DefaultTestRunner'
 
 # The name of the database to use for testing purposes.
 # If None, a name of 'test_' + DATABASE_NAME will be assumed
@@ -398,7 +398,7 @@ TEST_DATABASE_COLLATION = None
 
 
 # Specify the coverage test runner
-COVERAGE_TEST_RUNNER = 'django.test.test_coverage.BaseCoverageRunner.run_tests'
+COVERAGE_TEST_RUNNER = 'django.test.test_coverage.BaseCoverageRunner'
 
 # Specify regular expressions of code blocks the coverage analyzer should
 # ignore as statements (e.g. ``raise NotImplemented``).
