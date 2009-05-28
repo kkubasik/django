@@ -16,23 +16,25 @@ def _get_app_package(app_model_module):
 
 
 class BaseCoverageRunner(object):
-    """"""
+    """
+    Placeholder class for coverage runners. Intended to be easily extended.
+    """
 
-    #----------------------------------------------------------------------
     def __init__(self):
-        """Constructor"""
+        """Placeholder (since it is overrideable)"""
         pass
 
-    #----------------------------------------------------------------------
     def run_tests(self, test_labels, verbosity=1, interactive=True,
                   extra_tests=[]):
         """
-        Test runner which displays a code coverage report at the end of the
-        run.
+        Runs the specified tests while generating code coverage statistics. Upon
+        the tests' completion, the results are printed to stdout.
         """
+        #Allow an on-disk cache of coverage stats.
         #coverage.use_cache(0)
         for e in getattr(settings, 'COVERAGE_CODE_EXCLUDES', []):
             coverage.exclude(e)
+
         coverage.start()
         brt = base_run_tests()
         results = brt.run_tests(test_labels, verbosity, interactive, extra_tests)
@@ -71,10 +73,13 @@ class BaseCoverageRunner(object):
 
 
 class ReportingCoverageRunner(BaseCoverageRunner):
-    """Reporting"""
+    """Runs coverage.py analysis, as well as generating detailed HTML reports."""
 
     def __init__(self, outdir = None):
-        """Constructor"""
+        """
+        Constructor, overrides BaseCoverageRunner. Sets output directory
+        for reports. Parameter or setting.
+        """
         if(outdir):
             self.outdir = outdir
         else:
@@ -88,13 +93,16 @@ class ReportingCoverageRunner(BaseCoverageRunner):
 
 
     def run_tests(self, *args, **kwargs):
-        """"""
+        """
+        Overrides BaseCoverageRunner.run_tests, and adds html report generation
+        with the results
+        """
         res = BaseCoverageRunner.run_tests(self, *args, **kwargs)
         html_report(self.outdir, self.modules, self.excludes, self.errors)
         print >>sys.stdout
         print >>sys.stdout, "HTML reports were output to '%s'" %self.outdir
 
-        return res    
+        return res
 
 
 

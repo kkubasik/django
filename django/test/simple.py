@@ -147,9 +147,17 @@ def reorder_suite(suite, classes):
     return bins[0]
 
 class DefaultTestRunner(object):
+    """
+    The original test runner. No coverage reporting.
+    """
+
     def __init__(self):
+        """
+        Placeholder constructor. Want to make it obvious that it can
+        be overridden.
+        """
         pass
-    
+
     def run_tests(self, test_labels, verbosity=1, interactive=True, extra_tests=[]):
         """
         Run the unit tests for all the test labels in the provided list.
@@ -160,20 +168,20 @@ class DefaultTestRunner(object):
             Run all the test methods in a given class
          - app
             Search for doctests and unittests in the named application.
-    
+
         When looking for tests, the test runner will look in the models and
         tests modules for the application.
-    
+
         A list of 'extra' tests may also be provided; these tests
         will be added to the test suite.
-    
+
         Returns the number of tests that failed.
         """
         setup_test_environment()
-    
+
         settings.DEBUG = False
         suite = unittest.TestSuite()
-    
+
         if test_labels:
             for label in test_labels:
                 if '.' in label:
@@ -184,18 +192,18 @@ class DefaultTestRunner(object):
         else:
             for app in get_apps():
                 suite.addTest(build_suite(app))
-    
+
         for test in extra_tests:
             suite.addTest(test)
-    
+
         suite = reorder_suite(suite, (TestCase,))
-    
+
         old_name = settings.DATABASE_NAME
         from django.db import connection
         connection.creation.create_test_db(verbosity, autoclobber=not interactive)
         result = unittest.TextTestRunner(verbosity=verbosity).run(suite)
         connection.creation.destroy_test_db(old_name, verbosity)
-    
+
         teardown_test_environment()
-    
+
         return len(result.failures) + len(result.errors)

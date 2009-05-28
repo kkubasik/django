@@ -81,6 +81,10 @@ def teardown_test_environment():
 
 
 def get_runner(settings, coverage = False, reports = False):
+    """
+    Based on the settings and parameters, returns the appropriate test
+    runner class.
+    """
     if(coverage):
         if(reports):
             test_path = 'django.test.test_coverage.ReportingCoverageRunner'.split('.')
