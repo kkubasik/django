@@ -7,6 +7,7 @@ from django.test.simple import DefaultTestRunner as base_run_tests
 
 from django.utils.module_tools import get_all_modules
 from django.test.coverage_report import html_report
+from django.utils.translation import ugettext as _
 
 def _get_app_package(app_model_module):
     """
@@ -59,13 +60,13 @@ class BaseCoverageRunner(object):
         coverage.report(self.modules.values(), show_missing=1)
         if self.excludes:
             print >> sys.stdout
-            print >> sys.stdout, "The following packages or modules were excluded:",
+            print >> sys.stdout, _("The following packages or modules were excluded:"),
             for e in self.excludes:
                 print >> sys.stdout, e,
             print >>sys.stdout
         if self.errors:
             print >> sys.stdout
-            print >> sys.stderr, "There were problems with the following packages or modules:",
+            print >> sys.stderr, _("There were problems with the following packages or modules:"),
             for e in self.errors:
                 print >> sys.stderr, e,
             print >> sys.stdout
@@ -100,11 +101,6 @@ class ReportingCoverageRunner(BaseCoverageRunner):
         res = BaseCoverageRunner.run_tests(self, *args, **kwargs)
         html_report(self.outdir, self.modules, self.excludes, self.errors)
         print >>sys.stdout
-        print >>sys.stdout, "HTML reports were output to '%s'" %self.outdir
+        print >>sys.stdout, _("HTML reports were output to '%s'") %self.outdir
 
         return res
-
-
-
-
-
