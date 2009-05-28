@@ -6,7 +6,7 @@ class Command(BaseCommand):
     option_list = BaseCommand.option_list + (
         make_option('--noinput', action='store_false', dest='interactive', default=True,
             help='Tells Django to NOT prompt the user for input of any kind.'),
-        make_option('--coverage', action='store_false', dest='coverage', default=False,
+        make_option('--coverage', action='store_true', dest='coverage', default=False,
                     help='Tells Django to run the coverage runner'),
     )
     help = 'Runs the test suite for the specified applications, or the entire site if no apps are specified.'
@@ -20,8 +20,9 @@ class Command(BaseCommand):
 
         verbosity = int(options.get('verbosity', 1))
         interactive = options.get('interactive', True)
-        coverage = options.get('coverage', False)
-        test_runner = get_runner(settings, coverage=coverage)
+        cover = options.get('coverage', False)
+        print cover
+        test_runner = get_runner(settings, coverage=cover)
 
         failures = test_runner(test_labels, verbosity=verbosity, interactive=interactive)
         if failures:

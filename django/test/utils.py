@@ -80,7 +80,7 @@ def teardown_test_environment():
     del mail.outbox
 
 
-def get_runner(settings, coverage = False):
+def get_runner(settings, coverage = False, reports = False):
     if(coverage):
         test_path = settings.COVERAGE_TEST_RUNNER.split('.')
     else:
