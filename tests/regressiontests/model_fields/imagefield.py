@@ -167,6 +167,7 @@ if Image:
             loaded_p = pickle.loads(dump)
             self.assertEqual(p.mugshot, loaded_p.mugshot)
 
+
     class ImageFieldTwoDimensionsTests(ImageFieldTestMixin, TestCase):
         """
         Tests behavior of an ImageField and its dimensions fields.
