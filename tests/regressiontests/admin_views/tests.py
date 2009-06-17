@@ -1419,3 +1419,17 @@ class AdminInlineTests(TestCase):
         self.failUnlessEqual(response.status_code, 302)
         self.failUnlessEqual(FancyDoodad.objects.count(), 1)
         self.failUnlessEqual(FancyDoodad.objects.all()[0].name, "Fancy Doodad 1 Updated")
+
+
+import os
+from windmill.authoring import djangotest
+
+class TestProjectWindmillTest(djangotest.WindmillDjangoUnitTest):
+    test_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'windmilltests')
+    #test_dir = os.path.dirname(os.path.abspath(__file__))
+    browser = 'firefox'
+
+    # def test_tryout(self):
+    #     pass
+
+
