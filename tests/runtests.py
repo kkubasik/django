@@ -4,6 +4,7 @@ import os, sys, traceback
 import unittest
 import coverage
 import django.contrib as contrib
+from django.core.servers import basehttp
 
 try:
     set
@@ -32,6 +33,8 @@ ALWAYS_INSTALLED_APPS = [
     'django.contrib.admin',
     'windmill',
 ]
+
+ALWAYS_INSTALLED_APPS.extend(('%s.%s' % (REGRESSION_TESTS_DIR_NAME,a)  for a in os.listdir(REGRESSION_TEST_DIR) if not('.py' in a) ))
 
 def get_test_models():
     models = []
@@ -165,13 +168,19 @@ def django_tests(verbosity, interactive, test_labels):
     test_runner = get_runner(settings, coverage=True, reports=True)
     tr = test_runner()
     failures = tr.run_tests(test_labels, verbosity=verbosity, interactive=interactive, extra_tests=extra_tests)
+    #from windmill.authoring import djangotest
+    from django.test import windmill_tests as djangotest
     from django.core.management.commands.test_windmill import ServerContainer, attempt_import
     # as testwm_cmd
     #    windmill_runner = testwm_cmd()
     #    windmill_runner.handle()
 
+    from time import sleep
+    import types
+    import logging
     from windmill.conf import global_settings
-    from windmill.authoring.djangotest import WindmillDjangoUnitTest
+    from django.test.windmill_tests import WindmillDjangoUnitTest
+    # from windmill.authoring.djangotest import WindmillDjangoUnitTest
     # if 'ie' in labels:
     #        global_settings.START_IE = True
     #        sys.argv.remove('ie')
@@ -235,14 +244,16 @@ def django_tests(verbosity, interactive, test_labels):
         runner.CLIRunner.final = classmethod(lambda self, totals: testtotals.update(totals) )
         import windmill
         setup_module(tests[0][1])
-        sys.argv = sys.argv + wmtests
+        #sys.argv = sys.argv + wmtests
+        sys.argv = wmtests
         bin.cli()
         teardown_module(tests[0][1])
-        # if testtotals['fail'] is not 0:
-        #             sleep(.5)
-        #             sys.exit(1)
-    if failures or testtotals['fail'] is not 0:
-        sys.exit(failures + testtotals['fail'])
+        if testtotals['fail'] is not 0:
+            sleep(.5)
+            sys.exit(1)
+    if failures:
+        sleep(.5)
+        sys.exit(failures)
     # Restore the old settings.
     settings.INSTALLED_APPS = old_installed_apps
     settings.ROOT_URLCONF = old_root_urlconf
