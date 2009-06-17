@@ -222,6 +222,7 @@ def django_tests(verbosity, interactive, test_labels):
             else:
                 wmtests.append(os.path.abspath(mod.__file__))
 
+
     if len(wmtests) is 0:
         print 'Sorry, no windmill tests found.'
     else:
